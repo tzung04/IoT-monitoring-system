@@ -1,0 +1,1 @@
+// Định nghĩa API endpoints cho /api/devices

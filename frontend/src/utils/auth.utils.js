@@ -1,0 +1,1 @@
+// Hàm tiện ích (lưu/xóa token, kiểm tra đăng nhập)

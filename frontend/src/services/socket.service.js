@@ -1,0 +1,1 @@
+// Quản lý kết nối real-time (WebSocket/Socket.IO)

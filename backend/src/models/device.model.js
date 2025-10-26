@@ -1,0 +1,1 @@
+// Định nghĩa Schema cho thiết bị (tên, id, vị trí...)
