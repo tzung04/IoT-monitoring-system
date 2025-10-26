@@ -17,15 +17,29 @@ Dự án này được xây dựng để giải quyết nhu cầu giám sát cá
 
 ## Công nghệ sử dụng
 
-Dự án được chia thành 4 phần chính:
+Dự án được chia thành 5 phần chính:
 
 * **Frontend:** [React](https://reactjs.org/) 
 * **Backend:** [Node.js](https://nodejs.org/) 
 * **Database:** [InfluxDB](https://www.influxdata.com/)
 * **MQTT Broker:** [Mosquitto](https://mosquitto.org/) 
+* **Monitoring:** [Grafana](https://grafana.com/)
 
 ## Cài đặt
 
-Để chạy dự án này local, bạn cần cài đặt **Node.js**, **InfluxDB**, và **Mosquitto**.
+Để chạy dự án này local, bạn cần cài đặt **Node.js**, **InfluxDB**,**Grafana** và **Mosquitto**.
 
 Bạn có thể cài đặt các công cụ từ trang web nhà cung cấp
+
+## Làm việc
+# Luôn cập nhật từ main trước khi làm việc
+git checkout main
+git pull origin main
+
+# Chuyển sang branch feature của mình
+git checkout feature/your-feature
+
+# Làm việc, commit thường xuyên
+git add .
+git commit -m "feat: add user login component"
+git push origin feature/your-feature
