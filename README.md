@@ -1,45 +1,110 @@
+TÀI LIỆU DỰ ÁN IOT MONITORING SYSTEM
+1. THÔNG TIN DỰ ÁN
+Tên dự án: IoT Monitoring System
+Mô tả: Website thu thập dữ liệu cảm biến (nhiệt độ, độ ẩm), hiển thị realtime và cảnh báo ngưỡng 
+Công nghệ: Node.js, React, InfluxDB, MQTT, Docker
+2. SƠ ĐỒ USECASE
+Actors:
+- Người dùng (User)
+- Hệ thống (System)
+- Broker MQTT
+- Cảm biến (Sensor)
 
-# Website Giám sát Hệ thống IoT
+Use Cases:
 
-Một hệ thống website thời gian thực cho phép người dùng theo dõi và giám sát dữ liệu từ các thiết bị IoT một cách trực quan và hiệu quả.
+1. Quản lý người dùng
+   - Đăng nhập
+   - Đăng xuất
+   - Phân quyền truy cập
 
+2. Hiển thị dữ liệu
+   - Xem dashboard tổng quan
+   - Xem dữ liệu realtime
+   - Xem dữ liệu lịch sử
+   - Export dữ liệu
 
+3. Quản lý cảnh báo
+   - Thiết lập ngưỡng cảnh báo
+   - Xem danh sách cảnh báo
+   - Xử lý cảnh báo
+   - Gửi thông báo
 
-## Giới thiệu
+4. Quản lý thiết bị
+   - Thêm/xóa/sửa thiết bị
+   - Theo dõi trạng thái thiết bị
+   - Cấu hình thiết bị
 
-Dự án này được xây dựng để giải quyết nhu cầu giám sát các cảm biến (như nhiệt độ, độ ẩm, ánh sáng...) và điều khiển các thiết bị (như đèn, máy bơm...) từ xa qua giao diện web. Dữ liệu được truyền tải tức thì bằng MQTT và lưu trữ hiệu quả trong cơ sở dữ liệu chuỗi thời gian (InfluxDB) để dễ dàng truy vấn và vẽ biểu đồ.
+5. Thu thập dữ liệu
+   - Nhận dữ liệu từ cảm biến
+   - Lưu trữ vào database
+   - Xử lý dữ liệu realtime
 
-## Tính năng chính
+6. Báo cáo & Thống kê
+   - Báo cáo hàng ngày/tuần/tháng
+   - Thống kê xu hướng
+   - Phân tích dữ liệu
+3. CÔNG NGHỆ SỬ DỤNG
+3.1. Backend
+•	Node.js với Express.js
+•	InfluxDB Client để lưu trữ time series data
+•	JWT cho authentication
+3.2. Frontend
+•	React.js với hooks
+•	Chart.js hoặc Recharts để vẽ biểu đồ
+•	WebSocket để hiển thị realtime
+•	Material-UI hoặc Ant Design cho UI components
+3.3. Database
+•	InfluxDB cho dữ liệu time series
+•	PostgreSQL cho dữ liệu như user, devices, rules, …
+3.4. DevOps
+•	Docker & Docker Compose
+•	Git & GitHub cho version control
+4. HƯỚNG DẪN CÀI ĐẶT
+ Yêu cầu hệ thống
+•	Node.js 16+
+•	Docker & Docker Compose
+•	Git
 
-* ** Dashboard thời gian thực:** Hiển thị dữ liệu cảm biến mới nhất dưới dạng đồng hồ đo (gauges) và biểu đồ. 
-* ** Biểu đồ lịch sử:** Phân tích dữ liệu lịch sử của cảm biến theo các khoảng thời gian tùy chọn (giờ, ngày, tuần).
-* ** Cảnh báo (Tùy chọn):** Thiết lập ngưỡng để nhận cảnh báo khi dữ liệu vượt quá mức cho phép.
-
-## Công nghệ sử dụng
-
-Dự án được chia thành 5 phần chính:
-
-* **Frontend:** [React](https://reactjs.org/) 
-* **Backend:** [Node.js](https://nodejs.org/) 
-* **Database:** [InfluxDB](https://www.influxdata.com/)
-* **MQTT Broker:** [Mosquitto](https://mosquitto.org/) 
-* **Monitoring:** [Grafana](https://grafana.com/)
-
-## Cài đặt
-
-Để chạy dự án này local, bạn cần cài đặt **Node.js**, **InfluxDB**,**Grafana** và **Mosquitto**.
-
-Bạn có thể cài đặt các công cụ từ trang web nhà cung cấp
-
-## Làm việc
-# Luôn cập nhật từ main trước khi làm việc
-git checkout main
-git pull origin main
-
-# Chuyển sang branch feature của mình
-git checkout feature/your-feature
-
-# Làm việc, commit thường xuyên
-git add .
-git commit -m "feat: add user login component"
-git push origin feature/your-feature
+5. QUY TRÌNH PHÁT TRIỂN
+Quy tắc Git
+•	Main branch: main (protected)
+•	Develop branch: develop
+•	Feature branches: feature/backend, feature/frontend
+6. KIẾN TRÚC HỆ THỐNG
+monitoring-iot-web/
+├── backend/
+├── frontend/
+├── docker-compose.yml
+└── README.md
+7. API ENDPOINTS CHÍNH
+7.1. Authentication
+•	POST /api/auth/login
+•	POST /api/auth/register
+7.2. Device Management
+•	GET /api/devices
+•	POST /api/devices
+•	PUT /api/devices/:id
+7.3. Data
+•	GET /api/data/realtime
+•	GET /api/data/history
+•	GET /api/data/export
+7.4. Alerts
+•	GET /api/alerts
+•	POST /api/alerts/threshold
+8. PHÂN CÔNG CÔNG VIỆC 
+Phan Trí Dũng: Backend & MQTT
+•	Thiết lập MQTT broker
+•	Xử lý data ingestion
+•	Kết nối InfluxDB
+Lê Văn Được: Backend & API
+•	Authentication system
+•	REST API development
+•	Data export features
+Vũ Viết Dũng: Frontend & UI
+•	React components
+•	Real-time charts
+•	Dashboard design
+Vũ Mạnh Dũng: Frontend & Integration
+•	WebSocket integration
+•	Alert notifications
+•	ThresholdSettings
