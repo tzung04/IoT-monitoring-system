@@ -1,1 +1,0 @@
-// Trang quản lý danh sách thiết bị

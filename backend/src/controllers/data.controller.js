@@ -1,1 +1,0 @@
-// Logic nhận dữ liệu (từ MQTT) và truy vấn dữ liệu (cho API)

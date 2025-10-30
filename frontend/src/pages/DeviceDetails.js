@@ -1,1 +1,0 @@
-// Trang chi tiết cho một thiết bị cụ thể

@@ -1,1 +1,0 @@
-// Định nghĩa Schema cho dữ liệu cảm biến (giá trị, thời gian, id thiết bị)
