@@ -2,9 +2,9 @@
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
-const Users = require('../models/User');
+const Users = require('../models/user.model');
 const RefreshTokens = require('../models/RefreshTokens');
-const { sendResetPasswordEmail } = require('../services/emailServices');
+const { sendResetPasswordEmail } = require('../services/email.services');
 
 const handlerNewUser = async (req, res) => {
     try {
