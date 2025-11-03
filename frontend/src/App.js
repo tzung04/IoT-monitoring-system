@@ -9,6 +9,7 @@ import ReportPage from "./pages/ReportPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import ProtectedRoute from "./components/Auth/ProtectedRoute";
 import MainLayout from "./components/Layout/MainLayout";
+import ErrorBoundary from "./components/Common/ErrorBoundary";
 
 function App() {
   return (
@@ -22,7 +23,9 @@ function App() {
           path="/"
           element={
             <ProtectedRoute>
-              <MainLayout />
+              <ErrorBoundary>
+                <MainLayout />
+              </ErrorBoundary>
             </ProtectedRoute>
           }
         >
