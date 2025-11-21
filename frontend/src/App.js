@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import DeviceManagementPage from "./pages/DeviceManagementPage";
+import DeviceDetailPage from "./pages/DeviceDetailPage";
 import AlertManagementPage from "./pages/AlertManagementPage";
 import ReportPage from "./pages/ReportPage";
 import NotFoundPage from "./pages/NotFoundPage";
@@ -31,6 +32,7 @@ function App() {
         >
           <Route index element={<DashboardPage />} />
           <Route path="devices" element={<DeviceManagementPage />} />
+          <Route path="devices/:id" element={<DeviceDetailPage />} />
           <Route path="alerts" element={<AlertManagementPage />} />
           <Route path="reports" element={<ReportPage />} />
         </Route>

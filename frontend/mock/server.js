@@ -56,6 +56,22 @@ let devices = [
 ];
 
 let nextId = devices.length + 1;
+let alertRules = [
+  {
+    id: 1,
+    name: 'Temp > 28°C',
+    deviceId: 1,
+    type: 'temperature',
+    condition: '>',
+    threshold: 28,
+    severity: 'high',
+    active: true,
+  },
+];
+let nextRuleId = alertRules.length + 1;
+
+let alerts = [];
+let nextAlertId = 1;
 
 // Broadcast to all WebSocket clients
 const broadcast = (data) => {
@@ -97,6 +113,14 @@ wss.on('connection', (ws) => {
           timestamp: new Date().toISOString()
         }
       }));
+
+      evaluateRules({
+        deviceId: sensor.id,
+        type: 'temperature',
+        value,
+        unit: '°C',
+        timestamp: new Date().toISOString()
+      });
     });
   }, 5000);
 
@@ -173,6 +197,94 @@ app.delete('/api/devices/:id', (req, res) => {
     data: { id }
   });
   
+  res.json({ success: true });
+});
+
+// Alert helpers
+const checkCondition = (condition, value, threshold) => {
+  switch (condition) {
+    case '>':
+      return value > threshold;
+    case '>=':
+      return value >= threshold;
+    case '<':
+      return value < threshold;
+    case '<=':
+      return value <= threshold;
+    default:
+      return false;
+  }
+};
+
+const evaluateRules = (sensorData) => {
+  const { deviceId, type, value, unit, timestamp } = sensorData;
+  alertRules
+    .filter((r) => r.active && (!r.deviceId || r.deviceId === deviceId) && r.type === type)
+    .forEach((rule) => {
+      if (checkCondition(rule.condition, value, rule.threshold)) {
+        const alert = {
+          id: nextAlertId++,
+          ruleId: rule.id,
+          deviceId,
+          type,
+          value: Number(value.toFixed ? value.toFixed(1) : value),
+          unit,
+          severity: rule.severity || 'medium',
+          message: `${rule.name}: ${value.toFixed ? value.toFixed(1) : value}${unit || ''}`,
+          timestamp: timestamp || new Date().toISOString(),
+        };
+        alerts.unshift(alert);
+        alerts = alerts.slice(0, 100);
+        broadcast({ type: 'alert', data: alert });
+      }
+    });
+};
+
+// Alert endpoints
+app.get('/api/alerts', (req, res) => {
+  res.json(alerts.slice(0, 50));
+});
+
+app.get('/api/alerts/history', (req, res) => {
+  res.json(alerts);
+});
+
+app.get('/api/alerts/rules', (req, res) => {
+  res.json(alertRules);
+});
+
+app.post('/api/alerts/rules', (req, res) => {
+  const { name, deviceId, type, condition, threshold, severity } = req.body || {};
+  if (!name || !type || !condition || threshold === undefined) {
+    return res.status(400).json({ error: 'name, type, condition, threshold are required' });
+  }
+  const rule = {
+    id: nextRuleId++,
+    name,
+    deviceId: deviceId || null,
+    type,
+    condition,
+    threshold: Number(threshold),
+    severity: severity || 'medium',
+    active: true,
+  };
+  alertRules.push(rule);
+  res.status(201).json(rule);
+});
+
+app.patch('/api/alerts/rules/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const idx = alertRules.findIndex((r) => r.id === id);
+  if (idx === -1) return res.status(404).json({ error: 'Rule not found' });
+  alertRules[idx] = { ...alertRules[idx], ...req.body };
+  res.json(alertRules[idx]);
+});
+
+app.delete('/api/alerts/rules/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const idx = alertRules.findIndex((r) => r.id === id);
+  if (idx === -1) return res.status(404).json({ error: 'Rule not found' });
+  alertRules.splice(idx, 1);
   res.json({ success: true });
 });
 
