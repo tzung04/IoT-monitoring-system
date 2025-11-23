@@ -21,7 +21,8 @@
     "@influxdata/influxdb-client": "^1.33.2",
     "jsonwebtoken": "^9.0.2",
     "bcryptjs": "^2.4.3",
-    "ws": "^8.16.0"
+    "ws": "^8.16.0",
+    "nodemailer": "^7.0.7"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
