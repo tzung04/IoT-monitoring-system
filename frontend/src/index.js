@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import ReactDOM from "react-dom/client";
+import "./observability/faro";
 import App from "./App";
 import "./index.css";
 import { AuthProvider } from "./context/AuthContext";

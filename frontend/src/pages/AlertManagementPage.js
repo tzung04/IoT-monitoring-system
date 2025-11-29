@@ -24,8 +24,16 @@ import CloseIcon from "@mui/icons-material/Close";
 import useSocket from "../hooks/useSocket";
 import alertService from "../services/alert.service";
 import deviceService from "../services/device.service";
+import { trackEvent } from "../observability/faro";
 
 const MAX_ALERTS = 50;
+const DEFAULT_NOTIFICATION_CONFIG = {
+  emailEnabled: false,
+  emailRecipients: "",
+  webhookEnabled: false,
+  webhookUrl: "",
+  webhookSecret: "",
+};
 
 const AlertManagementPage = () => {
   const [alerts, setAlerts] = useState([]);
@@ -50,24 +58,51 @@ const AlertManagementPage = () => {
     active: true,
   });
   const [toast, setToast] = useState({ open: false, message: "", severity: "info" });
+  const [notificationConfig, setNotificationConfig] = useState(DEFAULT_NOTIFICATION_CONFIG);
+  const [loadingNotification, setLoadingNotification] = useState(true);
+  const [savingNotification, setSavingNotification] = useState(false);
+  const [testingNotification, setTestingNotification] = useState(false);
+
+  const toStateNotification = (config) => {
+    const recipients = Array.isArray(config?.emailRecipients)
+      ? config.emailRecipients.join(", ")
+      : config?.emailRecipients || "";
+    return {
+      ...DEFAULT_NOTIFICATION_CONFIG,
+      ...config,
+      emailRecipients: recipients,
+      webhookUrl: config?.webhookUrl || "",
+      webhookSecret: config?.webhookSecret || "",
+    };
+  };
 
   useEffect(() => {
     const load = async () => {
-      const [alertList, history, ruleList, deviceList] = await Promise.all([
-        alertService.getAlerts(),
-        alertService.getAlertHistory(),
-        alertService.getRules(),
-        deviceService.getDevices(),
-      ]);
-      // Merge latest + history, unique by id
-      const merged = [...history, ...alertList];
-      const uniq = merged.reduce((acc, item) => {
-        if (!acc.find((x) => x.id === item.id)) acc.push(item);
-        return acc;
-      }, []);
-      setAlerts(uniq.slice(0, MAX_ALERTS));
-      setRules(ruleList || []);
-      setDevices(deviceList || []);
+      try {
+        setLoadingNotification(true);
+        const [alertList, history, ruleList, deviceList, notifConfig] = await Promise.all([
+          alertService.getAlerts(),
+          alertService.getAlertHistory(),
+          alertService.getRules(),
+          deviceService.getDevices(),
+          alertService.getNotificationConfig(),
+        ]);
+        // Merge latest + history, unique by id
+        const merged = [...history, ...alertList];
+        const uniq = merged.reduce((acc, item) => {
+          if (!acc.find((x) => x.id === item.id)) acc.push(item);
+          return acc;
+        }, []);
+        setAlerts(uniq.slice(0, MAX_ALERTS));
+        setRules(ruleList || []);
+        setDevices(deviceList || []);
+        setNotificationConfig(toStateNotification(notifConfig));
+      } catch (err) {
+        console.error("Load alerts page error", err);
+        setToast({ open: true, message: "Không thể tải dữ liệu cảnh báo", severity: "error" });
+      } finally {
+        setLoadingNotification(false);
+      }
     };
     load();
   }, []);
@@ -81,9 +116,19 @@ const AlertManagementPage = () => {
       });
       setToast({ open: true, message: msg.data?.message || "Có cảnh báo mới", severity: "warning" });
     }
+    if (msg.type === "notification_test") {
+      setToast({ open: true, message: msg.data?.message || "Notification test", severity: "info" });
+    }
   });
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const handleNotificationChange = (field, value) =>
+    setNotificationConfig((prev) => ({ ...prev, [field]: value }));
+  const normalizeEmails = (value) =>
+    value
+      .split(",")
+      .map((v) => v.trim())
+      .filter(Boolean);
 
   const handleCreateRule = async (e) => {
     e.preventDefault();
@@ -96,10 +141,56 @@ const AlertManagementPage = () => {
       const created = await alertService.createRule(payload);
       setRules((prev) => [...prev, created]);
       setForm({ ...form, name: "" });
+      trackEvent("alert_rule_created", {
+        id: created?.id,
+        deviceId: payload.deviceId || "all",
+        type: payload.type,
+        condition: payload.condition,
+      });
       setToast({ open: true, message: "Đã tạo rule cảnh báo", severity: "success" });
     } catch (err) {
       console.error("Create rule error", err);
       setToast({ open: true, message: "Tạo rule thất bại", severity: "error" });
+    }
+  };
+
+  const saveNotification = async () => {
+    try {
+      setSavingNotification(true);
+      const payload = {
+        emailEnabled: !!notificationConfig.emailEnabled,
+        emailRecipients: normalizeEmails(notificationConfig.emailRecipients || ""),
+        webhookEnabled: !!notificationConfig.webhookEnabled,
+        webhookUrl: notificationConfig.webhookUrl || "",
+        webhookSecret: notificationConfig.webhookSecret || "",
+      };
+      const saved = await alertService.updateNotificationConfig(payload);
+      setNotificationConfig(toStateNotification(saved));
+      trackEvent("alert_notification_saved", {
+        emailEnabled: payload.emailEnabled,
+        webhookEnabled: payload.webhookEnabled,
+      });
+      setToast({ open: true, message: "Đã lưu cấu hình thông báo", severity: "success" });
+    } catch (err) {
+      console.error("Save notification config error", err);
+      setToast({ open: true, message: "Lưu cấu hình thất bại", severity: "error" });
+    } finally {
+      setSavingNotification(false);
+    }
+  };
+
+  const triggerTestNotification = async () => {
+    try {
+      setTestingNotification(true);
+      const resp = await alertService.sendTestNotification();
+      setToast({ open: true, message: resp?.message || "Đã gửi thử thông báo", severity: "info" });
+      trackEvent("alert_notification_test", { success: true });
+    } catch (err) {
+      console.error("Test notification error", err);
+      trackEvent("alert_notification_test", { success: false });
+      setToast({ open: true, message: "Gửi thử thất bại", severity: "error" });
+    } finally {
+      setTestingNotification(false);
     }
   };
 
@@ -138,6 +229,11 @@ const AlertManagementPage = () => {
       };
       const updated = await alertService.updateRule(id, payload);
       setRules((prev) => prev.map((r) => (r.id === id ? updated : r)));
+      trackEvent("alert_rule_updated", {
+        id,
+        active: payload.active,
+        severity: payload.severity,
+      });
       setToast({ open: true, message: "Đã cập nhật rule", severity: "success" });
       cancelEdit();
     } catch (err) {
@@ -151,6 +247,7 @@ const AlertManagementPage = () => {
     try {
       await alertService.deleteRule(id);
       setRules((prev) => prev.filter((r) => r.id !== id));
+      trackEvent("alert_rule_deleted", { id });
       setToast({ open: true, message: "Đã xóa rule", severity: "success" });
     } catch (err) {
       console.error("Delete rule error", err);
@@ -421,6 +518,92 @@ const AlertManagementPage = () => {
                       </Typography>
                     </Box>
                   ))}
+                </Stack>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      <Grid container spacing={2}>
+        <Grid item xs={12}>
+          <Card>
+            <CardContent>
+              <Typography variant="subtitle1" gutterBottom>
+                Cấu hình notification
+              </Typography>
+              {loadingNotification ? (
+                <Typography color="text.secondary">Đang tải cấu hình...</Typography>
+              ) : (
+                <Stack spacing={2}>
+                  <Stack spacing={1}>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Typography sx={{ minWidth: 160 }}>Gửi email</Typography>
+                      <Switch
+                        size="small"
+                        checked={!!notificationConfig.emailEnabled}
+                        onChange={(e) => handleNotificationChange("emailEnabled", e.target.checked)}
+                      />
+                    </Stack>
+                    <TextField
+                      label="Email nhận thông báo"
+                      placeholder="alert@example.com, ops@example.com"
+                      value={notificationConfig.emailRecipients}
+                      onChange={(e) => handleNotificationChange("emailRecipients", e.target.value)}
+                      size="small"
+                      fullWidth
+                      disabled={!notificationConfig.emailEnabled}
+                      helperText="Phân tách nhiều email bằng dấu phẩy"
+                    />
+                  </Stack>
+
+                  <Stack spacing={1}>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Typography sx={{ minWidth: 160 }}>Webhook</Typography>
+                      <Switch
+                        size="small"
+                        checked={!!notificationConfig.webhookEnabled}
+                        onChange={(e) => handleNotificationChange("webhookEnabled", e.target.checked)}
+                      />
+                    </Stack>
+                    <TextField
+                      label="Webhook URL"
+                      placeholder="https://example.com/webhook"
+                      value={notificationConfig.webhookUrl}
+                      onChange={(e) => handleNotificationChange("webhookUrl", e.target.value)}
+                      size="small"
+                      fullWidth
+                      disabled={!notificationConfig.webhookEnabled}
+                    />
+                    <TextField
+                      label="Webhook secret"
+                      type="password"
+                      value={notificationConfig.webhookSecret}
+                      onChange={(e) => handleNotificationChange("webhookSecret", e.target.value)}
+                      size="small"
+                      fullWidth
+                      disabled={!notificationConfig.webhookEnabled}
+                      helperText="Tùy chọn - dùng để ký payload"
+                    />
+                  </Stack>
+
+                  <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    spacing={1}
+                    justifyContent="flex-end"
+                    alignItems={{ xs: "stretch", sm: "center" }}
+                  >
+                    <Button
+                      variant="outlined"
+                      onClick={triggerTestNotification}
+                      disabled={savingNotification || testingNotification}
+                    >
+                      {testingNotification ? "Đang gửi..." : "Gửi thử"}
+                    </Button>
+                    <Button variant="contained" onClick={saveNotification} disabled={savingNotification}>
+                      {savingNotification ? "Đang lưu..." : "Lưu cấu hình"}
+                    </Button>
+                  </Stack>
                 </Stack>
               )}
             </CardContent>

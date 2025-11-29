@@ -72,6 +72,15 @@ let nextRuleId = alertRules.length + 1;
 
 let alerts = [];
 let nextAlertId = 1;
+let notificationConfig = {
+  emailEnabled: true,
+  emailRecipients: ['alerts@example.com'],
+  webhookEnabled: false,
+  webhookUrl: '',
+  webhookSecret: '',
+};
+let dashboardLayout = [];
+let reportSchedule = { enabled: false, frequency: 'daily', recipients: ['alerts@example.com'] };
 
 // Broadcast to all WebSocket clients
 const broadcast = (data) => {
@@ -286,6 +295,140 @@ app.delete('/api/alerts/rules/:id', (req, res) => {
   if (idx === -1) return res.status(404).json({ error: 'Rule not found' });
   alertRules.splice(idx, 1);
   res.json({ success: true });
+});
+
+app.get('/api/alerts/notifications', (req, res) => {
+  res.json(notificationConfig);
+});
+
+app.put('/api/alerts/notifications', (req, res) => {
+  const normalizeEmails = (value) => {
+    if (Array.isArray(value)) return value.filter(Boolean);
+    if (typeof value === 'string') {
+      return value
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean);
+    }
+    return notificationConfig.emailRecipients;
+  };
+
+  const { emailEnabled, emailRecipients, webhookEnabled, webhookUrl, webhookSecret } = req.body || {};
+  notificationConfig = {
+    emailEnabled: !!emailEnabled,
+    emailRecipients: normalizeEmails(emailRecipients),
+    webhookEnabled: !!webhookEnabled,
+    webhookUrl: webhookUrl || '',
+    webhookSecret: webhookSecret || '',
+  };
+
+  res.json(notificationConfig);
+});
+
+app.post('/api/alerts/notifications/test', (req, res) => {
+  const timestamp = new Date().toISOString();
+  broadcast({
+    type: 'notification_test',
+    data: { message: 'Test notification dispatched (mock)', timestamp },
+  });
+  res.json({ success: true, timestamp, message: 'Test notification sent (mock)' });
+});
+
+// Dashboard layout endpoints
+app.get('/api/dashboard/layout', (req, res) => {
+  res.json(dashboardLayout);
+});
+
+app.put('/api/dashboard/layout', (req, res) => {
+  const incoming = Array.isArray(req.body?.layout) ? req.body.layout : [];
+  dashboardLayout = incoming.map((w) => ({
+    id: w.id || Date.now(),
+    type: w.type || 'device_type',
+  }));
+  res.json(dashboardLayout);
+});
+
+// Reports & exports
+const buildSummary = () => {
+  const totalDevices = devices.length;
+  const online = devices.filter((d) => d.status === 'online').length;
+  const offline = totalDevices - online;
+  const alertCount = alerts.length;
+  const highAlerts = alerts.filter((a) => a.severity === 'high').length;
+  const mediumAlerts = alerts.filter((a) => a.severity === 'medium').length;
+  const lowAlerts = alerts.filter((a) => a.severity === 'low').length;
+
+  const now = new Date();
+  const trend = [];
+  for (let i = 5; i >= 0; i -= 1) {
+    const ts = new Date(now.getTime() - i * 60 * 60 * 1000);
+    const label = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const count = alerts.filter((a) => {
+      const t = new Date(a.timestamp || now);
+      return Math.abs(ts - t) < 60 * 60 * 1000;
+    }).length;
+    trend.push({ label, count });
+  }
+
+  return {
+    devices: { total: totalDevices, online, offline },
+    alerts: { total: alertCount, high: highAlerts, medium: mediumAlerts, low: lowAlerts },
+    trend,
+    generatedAt: new Date().toISOString(),
+  };
+};
+
+app.get('/api/reports/summary', (req, res) => {
+  res.json(buildSummary());
+});
+
+app.get('/api/reports/schedule', (req, res) => {
+  res.json(reportSchedule);
+});
+
+app.put('/api/reports/schedule', (req, res) => {
+  const { enabled, frequency, recipients } = req.body || {};
+  reportSchedule = {
+    enabled: !!enabled,
+    frequency: frequency || 'daily',
+    recipients: Array.isArray(recipients)
+      ? recipients.filter(Boolean)
+      : typeof recipients === 'string'
+      ? recipients.split(',').map((v) => v.trim()).filter(Boolean)
+      : reportSchedule.recipients,
+  };
+  res.json(reportSchedule);
+});
+
+app.post('/api/reports/export', (req, res) => {
+  const { format = 'csv' } = req.body || {};
+  const summary = buildSummary();
+  if (format === 'csv') {
+    const rows = [
+      'metric,value',
+      `total_devices,${summary.devices.total}`,
+      `online,${summary.devices.online}`,
+      `offline,${summary.devices.offline}`,
+      `alerts_total,${summary.alerts.total}`,
+      `alerts_high,${summary.alerts.high}`,
+      `alerts_medium,${summary.alerts.medium}`,
+      `alerts_low,${summary.alerts.low}`,
+    ];
+    const content = rows.join('\n');
+    return res.json({
+      fileName: 'report.csv',
+      mimeType: 'text/csv',
+      content: Buffer.from(content).toString('base64'),
+    });
+  }
+
+  // Simple mock PDF content
+  const pdfText = `Mock PDF Report\nGenerated: ${summary.generatedAt}\nDevices: ${summary.devices.total}\nAlerts: ${summary.alerts.total}`;
+  return res.json({
+    fileName: 'report.pdf',
+    mimeType: 'application/pdf',
+    content: Buffer.from(pdfText).toString('base64'),
+  });
 });
 
 app.get('/', (req, res) => res.json({ 

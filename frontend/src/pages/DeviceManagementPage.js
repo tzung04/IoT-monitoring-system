@@ -24,6 +24,7 @@ import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 import deviceService from "../services/device.service";
 import useSocket from "../hooks/useSocket";
+import { trackEvent } from "../observability/faro";
 
 const DeviceManagementPage = () => {
   const [devices, setDevices] = useState([]);
@@ -72,7 +73,14 @@ const DeviceManagementPage = () => {
   });
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
-  const handleFilterChange = (e) => setFilters({ ...filters, [e.target.name]: e.target.value });
+  const handleFilterChange = (e) => {
+    const next = { ...filters, [e.target.name]: e.target.value };
+    setFilters(next);
+    trackEvent("device_filter_applied", {
+      field: e.target.name,
+      value: e.target.value ? String(e.target.value).slice(0, 50) : "",
+    });
+  };
 
   const handleAdd = async (e) => {
     e.preventDefault();
@@ -85,6 +93,7 @@ const DeviceManagementPage = () => {
       const created = await deviceService.createDevice(form);
       if (created && created.id) {
         setDevices((d) => upsertDevice(d, created));
+        trackEvent("device_added", { id: created.id, type: created.type || "unknown" });
       } else {
         await load();
       }
@@ -102,6 +111,7 @@ const DeviceManagementPage = () => {
     try {
       await deviceService.deleteDevice(id);
       setDevices((d) => d.filter((x) => x.id !== id));
+      trackEvent("device_deleted", { id });
       setToast({ open: true, message: "Đã xóa thiết bị", severity: "success" });
     } catch (err) {
       setError("Xóa không thành công");
@@ -117,6 +127,7 @@ const DeviceManagementPage = () => {
       location: device.location,
       status: device.status || "offline",
     });
+    trackEvent("device_edit_start", { id: device.id });
   };
 
   const cancelEdit = () => {
@@ -129,6 +140,7 @@ const DeviceManagementPage = () => {
       const updated = await deviceService.updateDevice(id, editForm);
       setDevices((prev) => prev.map((d) => (d.id === id ? updated : d)));
       cancelEdit();
+      trackEvent("device_updated", { id, status: editForm.status, type: editForm.type || "unknown" });
       setToast({ open: true, message: "Đã cập nhật thiết bị", severity: "success" });
     } catch (err) {
       console.error("Update device error", err);
@@ -349,7 +361,13 @@ const DeviceManagementPage = () => {
                               ) : (
                                 <Stack direction="row" spacing={1}>
                                   <Tooltip title="Chi tiết">
-                                    <IconButton size="small" onClick={() => navigate(`/devices/${d.id}`)}>
+                                    <IconButton
+                                      size="small"
+                                      onClick={() => {
+                                        trackEvent("device_detail_view", { id: d.id });
+                                        navigate(`/devices/${d.id}`);
+                                      }}
+                                    >
                                       <VisibilityIcon fontSize="small" />
                                     </IconButton>
                                   </Tooltip>

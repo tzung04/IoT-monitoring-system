@@ -1,4 +1,5 @@
 import React from 'react';
+import { reportError } from '../../observability/faro';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -15,8 +16,8 @@ class ErrorBoundary extends React.Component {
     this.setState({ error, info });
     console.error('ErrorBoundary caught error:', error, info);
 
-    // Optional: send error to remote logging endpoint
-    // fetch('/error-collect', { method: 'POST', body: JSON.stringify({ error: String(error), info }) });
+    // Send error to observability pipeline (Grafana Faro)
+    reportError(error, { componentStack: info?.componentStack });
   }
 
   render() {

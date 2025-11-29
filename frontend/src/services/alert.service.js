@@ -2,6 +2,7 @@ import api from "./apiClient";
 
 const BASE = "/alerts";
 const RULES = `${BASE}/rules`;
+const NOTIFICATIONS = `${BASE}/notifications`;
 
 export const getAlerts = async () => {
   try {
@@ -63,6 +64,36 @@ export const deleteRule = async (id) => {
   }
 };
 
+export const getNotificationConfig = async () => {
+  try {
+    const resp = await api.get(NOTIFICATIONS);
+    return resp.data || {};
+  } catch (err) {
+    console.error("getNotificationConfig error", err);
+    return {};
+  }
+};
+
+export const updateNotificationConfig = async (payload) => {
+  try {
+    const resp = await api.put(NOTIFICATIONS, payload);
+    return resp.data;
+  } catch (err) {
+    console.error("updateNotificationConfig error", err);
+    throw err;
+  }
+};
+
+export const sendTestNotification = async () => {
+  try {
+    const resp = await api.post(`${NOTIFICATIONS}/test`);
+    return resp.data;
+  } catch (err) {
+    console.error("sendTestNotification error", err);
+    throw err;
+  }
+};
+
 export default {
   getAlerts,
   getAlertHistory,
@@ -70,4 +101,7 @@ export default {
   createRule,
   updateRule,
   deleteRule,
+  getNotificationConfig,
+  updateNotificationConfig,
+  sendTestNotification,
 };

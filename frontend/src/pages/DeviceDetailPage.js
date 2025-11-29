@@ -14,6 +14,7 @@ import {
 import deviceService from "../services/device.service";
 import useSocket from "../hooks/useSocket";
 import RealtimeChart from "../components/Charts/RealtimeChart";
+import { trackEvent } from "../observability/faro";
 
 const MAX_POINTS = 50;
 
@@ -23,12 +24,16 @@ const DeviceDetailPage = () => {
   const [device, setDevice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sensorData, setSensorData] = useState([]);
+  const [streamTracked, setStreamTracked] = useState(false);
 
   useEffect(() => {
     const fetchDevice = async () => {
       setLoading(true);
       const resp = await deviceService.getDevice(id);
       setDevice(resp);
+      if (resp?.id) {
+        trackEvent("device_detail_loaded", { id: resp.id, status: resp.status || "unknown" });
+      }
       setLoading(false);
     };
     fetchDevice();
@@ -46,6 +51,10 @@ const DeviceDetailPage = () => {
       setSensorData((prev) => {
         const next = [...prev, message.data];
         if (next.length > MAX_POINTS) next.shift();
+        if (!streamTracked) {
+          trackEvent("sensor_stream_started", { deviceId: message.data.deviceId, type: message.data.type });
+          setStreamTracked(true);
+        }
         return next;
       });
     }

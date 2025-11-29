@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import useAuth from "../../hooks/useAuth";
 import { useNavigate } from "react-router-dom";
+import { trackEvent } from "../../observability/faro";
 
 const LoginForm = () => {
   const { login } = useAuth();
@@ -19,9 +20,11 @@ const LoginForm = () => {
     // Giả lập xác thực (sẽ thay bằng API thật ở tuần 2)
     if (form.username === "admin" && form.password === "123456") {
       login("fake-jwt-token", { username: form.username });
+      trackEvent("auth_login_success", { method: "local" });
       navigate("/");
     } else {
       setError("Sai tài khoản hoặc mật khẩu");
+      trackEvent("auth_login_failed", { method: "local" });
     }
   };
 
