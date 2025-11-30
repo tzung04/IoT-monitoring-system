@@ -1,119 +1,246 @@
-// Xử lý logic đăng nhập, đăng ký
-const bcrypt = require('bcrypt');
-const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
-const Users = require('../models/user.model');
-const RefreshTokens = require('../models/RefreshTokens');
-const { sendResetPasswordEmail } = require('../services/email.services');
+ import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import crypto from 'crypto'
+import  User from '../models/user.model.js';
+import emailService from '../services/email.service.js';
 
-const handlerNewUser = async (req, res) => {
-    try {
-        const { username, email, password } = req.body;
-        if(!username || !email || !password) {
-            res.status(400).json(
-                { 'message': "Username, Email, Password are required!"}
-            );
+
+export const handlerRegister = async (req, res) => {
+  try {
+    const { username, email, password } = req.body;
+
+    // Validation
+    if (!username || !email || !password) {
+      return res.status(400).json({ 
+        message: 'Username, email and password are required' 
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ 
+        message: 'Password must be at least 6 characters' 
+      });
+    }
+
+    // Check if user exists
+    const existingUser = await User.findByUsername(username);
+    if (existingUser) {
+      return res.status(409).json({ 
+        message: 'Username already exists' 
+      });
+    }
+
+    const existingEmail = await User.findByEmail(email);
+    if (existingEmail) {
+      return res.status(409).json({ 
+        message: 'Email already exists' 
+      });
+    }
+
+    // Hash password
+    const hash = await bcrypt.hash(password, 10);
+
+    // Create user
+    const user = await User.create({
+      username,
+      email,
+      password_hash: hash
+    });
+
+      return res.status(201).json({
+        message: 'User registered successfully',
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email
         }
-        
-        //Kiểm tra trùng lặp
-        const existsUsername = await Users.findOne({ username });
-        const existsEmail = await Users.findOne({ email });
-        if(existsUsername) return res.status(400).json({ 'message': "Username already used"});
-        if(existsEmail) return res.status(400).json({ 'message': "Email already used"});
-       
-        //Băm mật khẩu
-        bcrypt.hash(password, 10, async (err, hash) => {
-            if(err) { return next(err); }
-            const newUser = await Users.create({ provider: 'local', email: email, username: username, passwordHash: hash});
-            return res.status(201).json({'message': 'Create user !', newUser });
-        });
-    } catch (err) {
-        console.error(err);
-        return res.status(500).json({ message: "Internal server error" });
-    }
-
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
 };
 
-const handlerLogout = (req, res) => {
+export const handlerLogin = async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ 
+        message: 'Username and password are required' 
+      });
+    }
+
+    // Find user
+    const user = await User.findByUsername(username);
+
+    if (!user) {
+      return res.status(401).json({ 
+        message: 'Invalid username or password' 
+      });
+    }
+
+    // Check password
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+
+    if (!isMatch) {
+    return res.status(401).json({ 
+        message: 'Invalid username or password' 
+    });
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+    { id: user.id, username: user.username, email: user.email },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRE || '7d'}
+    );
+
+    return res.json({
+        message: 'Login successful',
+        user: {
+            id: user.id,
+            username: user.username,
+            email: user.email
+        },
+        token
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const handlerGetMe = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    delete user.password_hash;
+    delete user.reset_code;
+    delete user.reset_expires;
+
+    return res.json(user);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const handlerChangePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ 
+        message: 'Current password and new password are required' 
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ 
+        message: 'New password must be at least 6 characters' 
+      });
+    }
+
+    // Find user
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check current password
+    const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!isMatch) {
+        return res.status(401).json({ message: 'Current password is incorrect' });
+    }
+
+    // Hash new password
+    const hash = await bcrypt.hash(newPassword, 10);
+
+    // Update password 
+    await User.updatePassword(req.user.id, hash);
+
+    return res.status(200).json({ message: 'Password changed successfully' });
     
-    try {
-        const authHeader = req.headers['authorization'];
-        if(!authHeader) return res.status(401).json({ message: "No authorization header" });
-        const assetToken = authHeader.split(' ')[1];
-        if(!assetToken) return res.status(401).json({ message: "No token provided" });
-        
-        jwt.verify(
-            assetToken,
-            process.env.JWT_ACCESS_TOKEN_SECRET,
-            async (err, decoded) => {
-                if(err) return res.status(403);
-                const { deletedCount } = await RefreshTokens.deleteOne({email: decoded.email, id: decoded.id});
-                if(deletedCount === 0) return res.status(403).json({ message: "Token not found or already deleted" });
-                return res.status(200).json({ message: "Logout successful" });
-            }
-        );
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const handlerForgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
     
-    } catch (err) {
-        console.error(err);
-        return res.status(500).json({ message: "Internal server error" });
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required' });
     }
+
+    const user = await User.findByEmail(email);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Tạo mã reset 6 ký tự
+    const resetCode = crypto.randomBytes(3).toString('hex').toUpperCase();
+    const resetExpires = Date.now() + 5 * 60 * 1000; // 5 phút
+
+    // Lưu mã reset vào DB 
+    await User.saveResetCode(user.id, resetCode, resetExpires);
+
+    // Gửi email với resetCode
+    const emailSent = await emailService.sendResetPasswordEmail(user.email, user.username, resetCode);
+
+    if (!emailSent) {
+      return res.status(500).json({ 
+        message: 'Failed to send email. Please try again later.' 
+      });
+    }
+
+    return res.status(200).json({ 
+      message: 'Reset code sent to email'
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
 };
 
-const handlerForgotPassword = async (req, res) => {
-    try {
-        const { email } = req.body;
-        if(!email) return res.status(400).json({ message: "Missing required fields"});
+export const handlerResetPassword = async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
 
-        const user = await Users.findOne({ email });
-        if(!user) return res.status(404).json({ message: "User not found"});
-
-        //Tạo mã 6 kí tự
-        const code = crypto.randomBytes(3).toString('hex').toUpperCase();
-
-        //Cập nhật vào DB
-        user.resetPasswordCode = code;
-        user.resetPasswordExpires = Date.now() + 5 * 60 * 1000;//5 phút tồn tại
-        await user.save();
-
-        //Gửi email
-        await sendResetPasswordEmail(user.email, user.username, code);
-
-        return res.status(200).json({ message: "Verification code sent via email" });
-    } catch (err) {
-        console.error(err);
-        return res.status(500).json({ message: "Internal server error" });
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({ message: 'Email, code and new password are required' });
     }
 
-}
-
-const handlerResetPassword = async (req, res) => {
-    try {
-        const { email, code, newPassword } = req.body;
-        if(!email || !code || !newPassword ) return res.status(400).json({ message: 'Missing required fields' });
-
-        const user = await Users.findOne({ email });
-        if(!user) return res.status(404).json({ message: "User not found. "});
-
-        if(user.resetPasswordCode !== code || !user.resetPasswordExpires || user.resetPasswordExpires < Date.now()){
-            return res.status(400).json({ message: 'Invalid or expired code' });
-        }
-
-        //Băm mật khẩu
-        bcrypt.hash(newPassword, 10, async (err, hash) => {
-            if(err) { return next(err); }
-
-            user.passwordHash = hash;
-            user.resetPasswordCode = null;
-            user.resetPasswordExpires = null;
-            await user.save();
-
-            return res.status(200).json({ message: 'Password reset successful' });
-        });
-    } catch (err) {
-        console.error(err);
-        return res.status(500).json({ message: "Internal server error" });
+    if (newPassword.length < 6) {
+      return res.status(400).json({ 
+        message: 'New password must be at least 6 characters' 
+      });
     }
+
+    // Tìm user và verify code 
+    const user = await User.findByResetCode(email, code);
+    
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid or expired code' });
+    }
+
+    // Hash password mới
+    const hash = await bcrypt.hash(newPassword, 10);
+
+    // Cập nhật password và xóa reset code
+    await User.resetPassword(user.id, hash);
+
+    return res.status(200).json({ message: 'Password reset successful' });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
 };
-
-module.exports = { handlerNewUser, handlerLogout, handlerForgotPassword, handlerResetPassword };
 

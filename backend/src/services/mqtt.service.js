@@ -1,102 +1,162 @@
-import mqtt from 'mqtt';
+import { getMQTTClient } from '../config/mqtt.js'; 
+import Device from '../models/device.model.js'; 
 import { writeSensorData } from '../config/influxdb.js';
-import { broadcast } from '../../server.js';
 
-let mqttClient;
 
-export const connectMQTT = async () => {
-  const brokerUrl = process.env.MQTT_BROKER || 'mqtt://localhost:1883';
+class MQTTService {
+  constructor() {
+    this.subscribedTopics = new Set();
+  }
+
+  // Subscribe tất cả devices đang active
+  async subscribeAllDevices() {
+    try {
   
-  mqttClient = mqtt.connect(brokerUrl, {
-    clientId: `iot_backend_${Math.random().toString(16).slice(3)}`,
-    clean: true,
-    connectTimeout: 4000,
-    reconnectPeriod: 1000,
-  });
+      const devices = await Device.findActiveDevices();
+      
+      if (!devices) return;
 
-  mqttClient.on('connect', () => {
-    console.log('✅ Connected to MQTT Broker');
-    
-    // Subscribe to all sensor topics
-    mqttClient.subscribe('sensors/#', (err) => {
-      if (err) {
-        console.error('❌ MQTT subscription error:', err);
-      } else {
-        console.log('📡 Subscribed to sensors/#');
-      }
-    });
-    
-    // Subscribe to device status
-    mqttClient.subscribe('devices/+/status', (err) => {
-      if (err) {
-        console.error('❌ MQTT subscription error:', err);
-      } else {
-        console.log('📡 Subscribed to devices/+/status');
-      }
-    });
-  });
+      devices.forEach(device => {
+        if (device.topic) {
+            this.subscribeTopic(device.topic);
+        }
+      });
 
-  mqttClient.on('message', async (topic, message) => {
+      console.log(`Subscribed to ${devices.length} device topics`);
+    } catch (err) {
+      console.error('Error subscribing to devices:', err);
+    }
+  }
+
+  // Subscribe 1 topic
+  subscribeTopic(topic) {
+    try {
+        const client = getMQTTClient();
+
+        if (this.subscribedTopics.has(topic)) {
+        console.log(`Already subscribed to: ${topic}`);
+        return;
+        }
+
+        client.subscribe(topic, { qos: 1 }, (err) => {
+        if (err) {
+            console.error(`Failed to subscribe to ${topic}:`, err);
+        } else {
+            this.subscribedTopics.add(topic);
+            console.log(`✓ Subscribed to: ${topic}`);
+        }
+        });
+    } catch (error) {
+        console.error("MQTT Client not ready yet");
+    }
+  }
+
+  // Unsubscribe 1 topic
+  unsubscribeTopic(topic) {
+    try {
+        const client = getMQTTClient();
+
+        if (!this.subscribedTopics.has(topic)) {
+        return;
+        }
+
+        client.unsubscribe(topic, (err) => {
+        if (err) {
+            console.error(`Failed to unsubscribe from ${topic}:`, err);
+        } else {
+            this.subscribedTopics.delete(topic);
+            console.log(`Unsubscribed from: ${topic}`);
+        }
+        });
+    } catch (error) {
+        console.error("MQTT Client not ready yet");
+    }
+  }
+
+  // Xử lý message nhận được
+  async handleMessage(topic, message) {
     try {
       const payload = JSON.parse(message.toString());
-      console.log('📨 MQTT Message:', topic, payload);
+      console.log(`Message from ${topic}:`, payload);
+
+      // Tìm device theo topic
+      const device = await Device.findByTopic(topic);
       
-      // Handle sensor data
-      if (topic.startsWith('sensors/')) {
-        const parts = topic.split('/');
-        const deviceId = parts[1];
-        const sensorType = parts[2];
-        
-        // Save to InfluxDB
-        await writeSensorData(deviceId, sensorType, payload.value, {
-          unit: payload.unit || '',
-          location: payload.location || ''
-        });
-        
-        // Broadcast to WebSocket clients
-        broadcast({
-          type: 'sensor_data',
-          deviceId,
-          sensorType,
-          data: payload,
-          timestamp: new Date().toISOString()
-        });
+      if (!device) {
+        console.warn(`Device not found for topic: ${topic}`);
+        return;
       }
-      
-      // Handle device status
-      if (topic.includes('/status')) {
-        broadcast({
-          type: 'device_status',
-          topic,
-          data: payload,
-          timestamp: new Date().toISOString()
-        });
+
+      if (!device.is_active) {
+        console.warn(`Device ${device.name} is not active`);
+        return;
       }
+
+      // Validate payload
+      if (!this.isValidPayload(payload)) {
+        console.warn('Invalid payload format:', payload);
+        return;
+      }
+
+      // Lưu vào InfluxDB
+      const saved = await writeSensorData(device.device_serial, payload);
       
-    } catch (error) {
-      console.error('❌ Error processing MQTT message:', error);
+      if (saved) {
+        console.log(`✓ Data saved to InfluxDB for device: ${device.name}`);
+      } else {
+        console.error(`Failed to save data for device: ${device.name}`);
+      }
+
+      // TODO: Kiểm tra alert rules
+      
+    } catch (err) {
+      console.error(`Error handling message from ${topic}:`, err);
     }
-  });
-
-  mqttClient.on('error', (error) => {
-    console.error('❌ MQTT Error:', error);
-  });
-
-  mqttClient.on('close', () => {
-    console.log('🔌 MQTT connection closed');
-  });
-
-  return mqttClient;
-};
-
-export const publishMessage = (topic, message) => {
-  if (mqttClient && mqttClient.connected) {
-    mqttClient.publish(topic, JSON.stringify(message));
-    return true;
   }
-  return false;
-};
 
-export const getMQTTClient = () => mqttClient;
+  // Validate payload
+  isValidPayload(payload) {
+    return payload && (
+      typeof payload.temperature === 'number' ||
+      typeof payload.humidity === 'number'
+    );
+  }
 
-export default { connectMQTT, publishMessage, getMQTTClient };
+  // Bắt đầu lắng nghe messages
+  startListening() {
+    try {
+        const client = getMQTTClient();
+
+        client.on('message', (topic, message) => {
+        this.handleMessage(topic, message);
+        });
+
+        console.log('MQTT listening for messages');
+    } catch (error) {
+        console.error("Cannot start listening: MQTT Client not initialized");
+    }
+  }
+
+  // Publish message
+  publish(topic, message) {
+    try {
+        const client = getMQTTClient();
+        
+        const payload = typeof message === 'string' ? message : JSON.stringify(message);
+        
+        client.publish(topic, payload, { qos: 1 }, (err) => {
+        if (err) {
+            console.error(`Failed to publish to ${topic}:`, err);
+        } else {
+            console.log(`✓ Published to ${topic}`);
+        }
+        });
+    } catch (error) {
+        console.error("Cannot publish: MQTT Client not initialized");
+    }
+  }
+}
+
+
+const mqttService = new MQTTService();
+export default mqttService;

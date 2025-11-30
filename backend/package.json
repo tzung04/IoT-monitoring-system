@@ -9,22 +9,28 @@
     "dev": "nodemon server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["iot", "mqtt", "influxdb", "postgresql"],
+  "keywords": [
+    "iot",
+    "mqtt",
+    "influxdb",
+    "postgresql"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.18.2",
+    "@influxdata/influxdb-client": "^1.33.2",
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
-    "pg": "^8.11.3",
-    "mqtt": "^5.3.0",
-    "@influxdata/influxdb-client": "^1.33.2",
+    "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
-    "bcryptjs": "^2.4.3",
-    "ws": "^8.16.0",
-    "nodemailer": "^7.0.7"
+    "mqtt": "^5.3.0",
+    "nodemailer": "^7.0.7",
+    "pg": "^8.11.3",
+    "ws": "^8.16.0"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "nodemon": "^3.0.2"
   }
 }

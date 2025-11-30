@@ -1,33 +1,44 @@
-const jwt = require('jsonwebtoken');
-const RefreshTokens = require('../models/RefreshTokens');
-const { json } = require('express');
+import jwt from 'jsonwebtoken';
 
-const handleRefreshToken = async (req, res) => {
-    try {
-        const authHeader = req.headers['authorization'];
-        if(!authHeader) return res.status(400).json({ 'message': 'Missing data!' });
-        const refreshToken = authHeader.split(' ')[1];
-        
-        const tokenUser = await RefreshTokens.findOne({ refreshToken });
-        if(!tokenUser) return res.status(401),json({ message: "Error" });
-        
-        jwt.verify(
-            refreshToken,
-            process.env.JWT_REFRESH_TOKEN_SECRET,
-            (err, decoded) => {
-                if(err) return res.status(500).json({ message: "Server error" });
-                const accessToken = jwt.sign(
-                    { userId: decoded.userId , email: decoded.email},
-                    process.env.JWT_ACCESS_TOKEN_SECRET,
-                    { expiresIn: '15m'}
-                );
+const authMiddleware = (req, res, next) => {
+  try {
+    const authHeader = req.headers['authorization'];
     
-                return res.status(200).json({ accessToken });
-            }
-        );
-    } catch (err) {
-        return res.status(500).json({ message: "Server error" });
+    if (!authHeader) {
+      return res.status(401).json({ message: 'No authorization header' });
     }
+
+    const token = authHeader.split(' ')[1];
+    
+    if (!token) {
+      return res.status(401).json({ message: 'No token provided' });
+    }
+
+    // Verify token
+    jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+      if (err) {
+        if (err.name === 'TokenExpiredError') {
+          return res.status(401).json({ message: 'Token expired' });
+        }
+        if (err.name === 'JsonWebTokenError') {
+          return res.status(401).json({ message: 'Invalid token' });
+        }
+        return res.status(403).json({ message: 'Token verification failed' });
+      }
+
+      // Attach user info to request
+      req.user = {
+        id: decoded.id,
+        username: decoded.username,
+        email: decoded.email
+      };
+
+      next();
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
 };
 
-module.exports = { handleRefreshToken };
+export default authMiddleware;
