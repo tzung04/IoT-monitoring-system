@@ -77,7 +77,15 @@ class MQTTService {
   async handleMessage(topic, message) {
     try {
       const payload = JSON.parse(message.toString());
-      console.log(`Message from ${topic}:`, payload);
+
+      const parts = topic.split('/');
+      if (parts.length >= 3) {
+          const fromDevice = `${parts[1]}/${parts[2]}`;
+          console.log(`Message from ${fromDevice}`); 
+      } else {
+        // In ra cả topic nếu sai định dạng
+          console.log(`Message from ${topic}`);
+      }
 
       // Tìm device theo topic
       const device = await Device.findByTopic(topic);
