@@ -107,7 +107,7 @@ class MQTTService {
       }
 
       // Lưu vào InfluxDB
-      const saved = await writeSensorData(device.device_serial, payload);
+      const saved = await writeSensorData(device.device_serial, device.user_id, payload);
       
       if (saved) {
         console.log(`✓ Data saved to InfluxDB for device: ${device.name}`);

@@ -17,10 +17,11 @@ export const writeApi = influxDB.getWriteApi(
 export const queryApi = influxDB.getQueryApi(process.env.INFLUX_ORG);
 
 // Write sensor data
-export const writeSensorData = async (deviceSerial, measurements) => {
+export const writeSensorData = async (deviceSerial, userId, measurements) => {
   try {
     const point = new Point('sensor_data')
-      .tag('device', deviceSerial);
+      .tag('device', deviceSerial)
+      .tag('user_id', userId.toString());
 
     // Add fields dynamically
     if (measurements.temperature !== undefined) {
@@ -48,6 +49,7 @@ export const querySensorData = async (deviceSerial, hours = 24) => {
     from(bucket: "${process.env.INFLUX_BUCKET}")
       |> range(start: -${hours}h)
       |> filter(fn: (r) => r._measurement == "sensor_data")
+      |> filter(fn: (r) => r.user_id == "${userId}")
       |> filter(fn: (r) => r.device == "${deviceSerial}")
       |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
   `;
