@@ -10,3 +10,21 @@
 1764518413: Saving in-memory database to /mosquitto/data//mosquitto.db.
 1764520214: Saving in-memory database to /mosquitto/data//mosquitto.db.
 1764522015: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1764577533: mosquitto version 2.0.22 starting
+1764577533: Config loaded from /mosquitto/config/mosquitto.conf.
+1764577533: Opening ipv4 listen socket on port 1883.
+1764577533: Opening ipv6 listen socket on port 1883.
+1764577533: Opening websockets listen socket on port 9001.
+1764577533: mosquitto version 2.0.22 running
+1764579334: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1764581135: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1764582936: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1764586087: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1764588245: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1764590050: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1764591851: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1764593652: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1764595453: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1764597254: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1764599055: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1764603479: Saving in-memory database to /mosquitto/data//mosquitto.db.

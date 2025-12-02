@@ -7,8 +7,11 @@ import mqttService from './services/mqtt.service.js'
 import emailService from './services/email.service.js';
 import { testConnection } from './config/influxdb.js';
 
+
 // Import routes
 import authRoutes from './routes/auth.routes.js';
+import dashboardRoutes from './routes/dashboard.routes.js';
+import dataRoutes from './routes/data.routes.js';
 
 dotenv.config();
 const app = express();
@@ -40,6 +43,8 @@ app.get('/', (req, res) => {
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/data', dataRoutes);
 
 // 404 handler
 app.use((req, res) => {

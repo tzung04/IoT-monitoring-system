@@ -60,6 +60,10 @@ EMAIL_PORT=587
 EMAIL_USER=your_email@gmail.com
 EMAIL_PASSWORD=your_app_password
 EMAIL_FROM=IoT Monitor <noreply@iotmonitor.com>
+
+# Grafana
+GRAFANA_URL=http://localhost:3001
+GRAFANA_DASHBOARD_UID=dashboard_uid
 ```
 
 ### Bước 4: Setup Database
@@ -76,13 +80,171 @@ CREATE DATABASE iot_monitoring;
 node src/config/database.js
 ```
 
-### Bước 5: Setup InfluxDB
+### Bước 5.1: Setup InfluxDB
 
 1. Truy cập: `http://localhost:8086`
 2. Tạo tài khoản admin
 3. Tạo Organization (ví dụ: `my-org`)
 4. Tạo Bucket tên: `iot_sensors`
 5. Vào **API Tokens** → Copy token và paste vào `.env`
+
+### Bước 5.2: Setup Grafana
+
+1. Truy cập:
+- URL: `http://localhost:3001`
+- Login: `admin` / `admin`
+2. Vào Connections/Data Sources
+3. Add data source: chọn InfluxDB
+  Cấu hình:
+    ```
+    Name: InfluxDB-IoT
+
+    Query Language: Flux
+
+    HTTP:
+      URL: http://influxdb:8086
+      (Chú ý: dùng tên service trong docker, không phải localhost)
+
+    InfluxDB Details(xem ở bước 5.1):
+      Organization: 
+      Token: 
+      Default Bucket: 
+    ```
+4. Click **Save & Test** → Phải thấy "Success"
+5. Tạo Dashboard:
+  5.1 Tạo Dashboard mới
+
+    1. Click **+** (sidebar) → **Create Dashboard**
+    2. Click **Add visualization**
+    3. Chọn data source: **InfluxDB-IoT**
+
+  5.2 Tạo Variables (quan trọng!)
+
+  Click **Dashboard settings** → **Variables** → **Add variable**
+
+  Variable 1: user_id
+  ```
+  Name: user_id
+  Type: Query
+  Data source: InfluxDB-IoT
+  Query:
+    from(bucket: "iot_sensors")
+      |> range(start: -7d)
+      |> filter(fn: (r) => r._measurement == "sensor_data")
+      |> keep(columns: ["user_id"])
+      |> distinct(column: "user_id")
+
+  Multi-value: NO
+  Include All option: NO
+  ```
+
+  Variable 2: devices
+  ```
+  Name: devices
+  Type: Query
+  Data source: InfluxDB-IoT
+  Query:
+    from(bucket: "iot_sensors")
+      |> range(start: -7d)
+      |> filter(fn: (r) => r._measurement == "sensor_data")
+      |> filter(fn: (r) => r.user_id == "${user_id}")
+      |> keep(columns: ["device"])
+      |> distinct(column: "device")
+
+  Multi-value: YES
+  Include All option: YES
+
+  Sau đó Save
+6. Tạo Panels
+Panel 1: Temperature Time Series
+  Click Add panel
+  Query:
+  ```
+  from(bucket: "iot_sensors")
+    |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+    |> filter(fn: (r) => r._measurement == "sensor_data")
+    |> filter(fn: (r) => r.user_id == "${user_id}")
+    |> filter(fn: (r) => r.device =~ /^${devices:regex}$/)
+    |> filter(fn: (r) => r._field == "temperature")
+    |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)
+  ```
+  Visualization:
+
+  Type: Time series
+  Title: Temperature Over Time
+
+  Panel options:
+
+  Unit: Celsius (°C)
+  Legend: Show
+
+  Click Save
+
+Panel 2: Humidity Time Series
+Tương tự Panel 1, chỉ đổi:
+```
+|> filter(fn: (r) => r._field == "humidity")
+```
+Panel options:
+
+Unit: Percent (0-100)
+Title: Humidity Over Time
+
+Panel 3: Latest Temperature (Stat)
+Click Add panel
+Query:
+```
+from(bucket: "iot_sensors")
+  |> range(start: -5m)
+  |> filter(fn: (r) => r._measurement == "sensor_data")
+  |> filter(fn: (r) => r.user_id == "${user_id}")
+  |> filter(fn: (r) => r.device =~ /^${devices:regex}$/)
+  |> filter(fn: (r) => r._field == "temperature")
+  |> last()
+```
+Visualization:
+
+Type: Stat
+Title: Current Temperature
+Unit: Celsius (°C)
+Graph mode: None
+Text size: Auto
+Panel 4: Latest Humidity (Gauge)
+Query:
+```
+from(bucket: "iot_sensors")
+  |> range(start: -5m)
+  |> filter(fn: (r) => r._measurement == "sensor_data")
+  |> filter(fn: (r) => r.user_id == "${user_id}")
+  |> filter(fn: (r) => r.device =~ /^${devices:regex}$/)
+  |> filter(fn: (r) => r._field == "humidity")
+  |> last()
+```
+Visualization:
+
+Type: Gauge
+Title: Current Humidity
+Unit: Percent (0-100)
+Min: 0
+Max: 100
+
+7. Lưu Dashboard
+
+Click Save dashboard (góc trên bên phải)
+Name: dashboard_name
+Click Save
+
+Lấy Dashboard UID: xem url của dashboard, uid nằm ở /d/uid/dashboard_name
+
+Copy UID (ví dụ: abc123xyz)
+Paste vào .env
+
+8. Giả sử đã đặt dashboard_name là IoT-monitoring
+có thể lấy url sau để test:
+nhớ tạo 1 user có 1 device xác định topic, bắn dữ liệu vô topic liên tục để test
+ có thể dùng dashboardRoutes để lấy url
+http://localhost:3001/d/abc123xyz/iot-monitoring?orgId=1&var-user_id=1&theme=light&from=now-15m&to=now&timezone=browser&refresh=5s
+
 
 ### Bước 6: Khởi động Server
 
