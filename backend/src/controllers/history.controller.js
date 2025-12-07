@@ -1,20 +1,33 @@
-const { querySensorData, getQueryApi } = require('../config/influxdb');
-const db = require('../config/database'); 
+import { querySensorData } from '../config/influxdb.js';
+import AlertLog from '../models/alertLog.model.js';
+import Device from '../models/device.model.js';
 
 // Lấy lịch sử dữ liệu cảm biến từ InfluxDB
-exports.getSensorDataHistory = async (req, res) => {
-    const { deviceKey, timeRange = '-6h', sensorType } = req.query; 
-    
-    if (!deviceKey || !sensorType) {
-        return res.status(400).json({ message: 'Thiếu deviceKey hoặc sensorType.' });
+export const getSensorDataHistory = async (req, res) => {
+    const { deviceKey, timeRange = '-24h', sensorType } = req.query;
+
+    if (!deviceKey) {
+        return res.status(400).json({ message: 'Thiếu deviceKey.' });
     }
 
     try {
-        // --- BƯỚC THAY ĐỔI: Truy vấn InfluxDB ---
-        // Sử dụng hàm querySensorData đã định nghĩa
-        const results = await querySensorData(deviceKey, sensorType, timeRange);
+        const userId = req.user.id;
 
-        // Lưu ý: Kết quả trả về đã được format sẵn trong hàm querySensorData
+        // 1. Bảo mật: Xác thực quyền sở hữu thiết bị
+        // Lấy device theo key và kiểm tra user_id
+        const device = await Device.findByTopic(deviceKey);
+        if (!device || device.user_id.toString() !== userId.toString()) {
+            return res.status(403).json({ message: 'Thiết bị không tồn tại hoặc bạn không có quyền truy cập.' });
+        }
+
+        // Chuyển timeRange thành số giờ (vì hàm querySensorData mới nhận hours)
+        let hours = 24;
+        if (timeRange.endsWith('h')) {
+            hours = parseInt(timeRange.slice(1, -1));
+        }
+
+        const results = await querySensorData(device.device_serial, hours);
+
         res.json(results);
     } catch (error) {
         console.error('API Error querying InfluxDB:', error);
@@ -22,39 +35,14 @@ exports.getSensorDataHistory = async (req, res) => {
     }
 };
 
-exports.getAlertsHistory = async (req, res) => {
-    const { deviceId, status = 'pending' } = req.query;
-    
+// Lấy lịch sử cảnh báo từ PostgreSQL
+export const getAlertsHistory = async (req, res) => {
+
     try {
-        let query = `
-            SELECT 
-                a.id, a.value, a.triggered_at, a.status,
-                r.message AS rule_message,
-                d.name AS device_name,
-                r.parameter, r.operator, r.threshold
-            FROM alerts a
-            JOIN alert_rules r ON a.rule_id = r.id
-            JOIN devices d ON a.device_id = d.id
-            WHERE d.user_id = $1                           -- Đảm bảo chỉ lấy alerts của user hiện tại
-        `;
-        
         const userId = req.user.id;
-        const params = [userId];
+        const alerts = await AlertLog.findByUserId(userId, 100);
 
-        // Lọc theo Device ID nếu có
-        if (deviceId) {
-            query += ` AND a.device_id = $${params.length + 1}`;
-            params.push(deviceId);
-        }
-
-        // Lọc theo trạng thái (pending, resolved, v.v.)
-        query += ` AND a.status = $${params.length + 1}`;
-        params.push(status);
-        
-        query += ` ORDER BY a.triggered_at DESC LIMIT 100;`; // Lấy 100 cảnh báo gần nhất
-
-        const { rows } = await db.query(query, params);
-        res.json(rows);
+        res.json(alerts);
     } catch (err) {
         console.error('PostgreSQL Alerts Query Error:', err);
         res.status(500).json({ error: 'Lỗi truy vấn lịch sử cảnh báo.' });

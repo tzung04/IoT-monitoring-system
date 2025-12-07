@@ -1,75 +1,25 @@
-import pool from '../config/database.js';
+import express from 'express';
+import * as deviceController from '../controllers/device.controller.js'; // Nhớ thêm đuôi .js
+import authMiddleware from '../middleware/auth.middleware.js';
 
-class Device {
-  static async create({ user_id, place_id, device_serial, name, topic, is_active = true }) {
-    const result = await pool.query(
-      `INSERT INTO devices (user_id, place_id, device_serial, name, topic, is_active) 
-       VALUES ($1, $2, $3, $4, $5, $6) 
-       RETURNING *`,
-      [user_id, place_id, device_serial, name, topic, is_active]
-    );
-    return result.rows[0];
-  }
+const router = express.Router();
 
-  static async findByUserId(user_id) {
-    const result = await pool.query(
-      `SELECT d.*, p.name as place_name 
-       FROM devices d 
-       LEFT JOIN places p ON d.place_id = p.id 
-       WHERE d.user_id = $1 
-       ORDER BY d.created_at DESC`,
-      [user_id]
-    );
-    return result.rows;
-  }
+// Áp dụng middleware xác thực
+router.use(authMiddleware); 
 
-  static async findById(id) {
-    const result = await pool.query(
-      `SELECT d.*, p.name as place_name 
-       FROM devices d 
-       LEFT JOIN places p ON d.place_id = p.id 
-       WHERE d.id = $1`,
-      [id]
-    );
-    return result.rows[0];
-  }
+// Lấy tất cả thiết bị của người dùng hiện tại
+router.get('/', deviceController.getAllUserDevices);
 
-  static async findByTopic(topic) {
-    const result = await pool.query(
-      'SELECT * FROM devices WHERE topic = $1',
-      [topic]
-    );
-    return result.rows[0];
-  }
+// Thêm thiết bị mới
+router.post('/', deviceController.createDevice);
 
-  static async findActiveDevices() {
-    const result = await pool.query(
-      'SELECT * FROM devices WHERE is_active = true'
-    );
-    return result.rows;
-  }
+// Lấy chi tiết thiết bị theo ID
+router.get('/:deviceId', deviceController.getDeviceById);
 
-  static async update(id, { place_id, name, topic, is_active }) {
-    const result = await pool.query(
-      `UPDATE devices 
-       SET place_id = COALESCE($1, place_id),
-           name = COALESCE($2, name),
-           topic = COALESCE($3, topic),
-           is_active = COALESCE($4, is_active)
-       WHERE id = $5 
-       RETURNING *`,
-      [place_id, name, topic, is_active, id]
-    );
-    return result.rows[0];
-  }
+// Cập nhật thông tin thiết bị
+router.put('/:deviceId', deviceController.updateDevice);
 
-  static async delete(id) {
-    const result = await pool.query(
-      'DELETE FROM devices WHERE id = $1 RETURNING *',
-      [id]
-    );
-    return result.rows[0];
-  }
-}
+// Xóa thiết bị
+router.delete('/:deviceId', deviceController.deleteDevice);
 
-export default Device;
+export default router;
