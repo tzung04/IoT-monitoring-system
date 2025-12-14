@@ -1,4 +1,4 @@
-import Device from '../models/device.model.js'; // Đảm bảo đúng đường dẫn file model
+import Device from '../models/device.model.js'; 
 import crypto from 'crypto';
 
 // Helper function: Logic kiểm tra quyền sở hữu thiết bị
