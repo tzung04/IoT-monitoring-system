@@ -1,112 +1,132 @@
-const db = require('../config/database');
+import AlertRule from '../models/alertRule.model.js';
+import pool from '../config/database.js'; // Dùng để check quyền sở hữu thiết bị nhanh
 
-//Thêm cảnh báo mới
-exports.createRule = async (req, res) => {
-    const { device_id, parameter, operator, threshold, message, is_active } = req.body;
-    const userId = req.user.id; 
+// Helper function: Kiểm tra xem thiết bị có thuộc về user không
+const checkDeviceOwnership = async (deviceId, userId) => {
+    const result = await pool.query('SELECT user_id FROM devices WHERE id = $1', [deviceId]);
+    if (result.rows.length === 0) return false;
+    return result.rows[0].user_id === userId;
+};
 
-    //Kiểm tra xem thiết bị có thuộc về người dùng không
+// Helper function: Lấy device_id từ rule_id để check quyền
+const getDeviceIdByRuleId = async (ruleId) => {
+    const result = await pool.query('SELECT device_id FROM alert_rules WHERE id = $1', [ruleId]);
+    if (result.rows.length === 0) return null;
+    return result.rows[0].device_id;
+};
+
+// --- CONTROLLERS ---
+
+// Thêm cảnh báo mới
+export const createRule = async (req, res) => {
+    const { device_id, metric_type, condition, threshold, email_to, is_enabled } = req.body;
+    const userId = req.user.id;
+
     try {
-        const checkQuery = 'SELECT user_id FROM devices WHERE id = $1';
-        const { rows: deviceRows } = await db.query(checkQuery, [device_id]);
-
-        if (deviceRows.length === 0 || deviceRows[0].user_id !== userId) {
+        // 1. Bảo mật: Kiểm tra thiết bị có thuộc về User này không
+        const isOwner = await checkDeviceOwnership(device_id, userId);
+        if (!isOwner) {
             return res.status(403).json({ message: 'Bạn không có quyền tạo quy tắc cho thiết bị này.' });
         }
-        
-        //Thêm canh báo mới
-        const insertQuery = `
-            INSERT INTO alert_rules (device_id, parameter, operator, threshold, message, is_active)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING *;
-        `;
-        const values = [device_id, parameter, operator, threshold, message, is_active !== undefined ? is_active : true];
-        const { rows } = await db.query(insertQuery, values);
-        
-        res.status(201).json(rows[0]);
+
+        // 2. Gọi Model để tạo
+        const newRule = await AlertRule.create({
+            device_id, 
+            metric_type, 
+            condition, 
+            threshold, 
+            email_to, 
+            is_enabled
+        });
+
+        res.status(201).json(newRule);
     } catch (err) {
         console.error('Error creating alert rule:', err);
         res.status(500).json({ error: 'Lỗi máy chủ khi tạo quy tắc cảnh báo.' });
     }
 };
 
-//Lấy tất cả  cảnh báo theo Device ID
-exports.getRulesByDevice = async (req, res) => {
+// Lấy tất cả cảnh báo theo Device ID
+export const getRulesByDevice = async (req, res) => {
     const { deviceId } = req.params;
     const userId = req.user.id;
 
     try {
-        // Lấy các quy tắc và JOIN với bảng devices để xác thực quyền
-        const query = `
-            SELECT 
-                r.id, r.parameter, r.operator, r.threshold, r.message, r.is_active, r.created_at
-            FROM alert_rules r
-            JOIN devices d ON r.device_id = d.id
-            WHERE d.id = $1 AND d.user_id = $2
-            ORDER BY r.id;
-        `;
-        const { rows } = await db.query(query, [deviceId, userId]);
+        // 1. Bảo mật: Kiểm tra quyền sở hữu
+        const isOwner = await checkDeviceOwnership(deviceId, userId);
+        if (!isOwner) {
+            return res.status(403).json({ message: 'Bạn không có quyền xem quy tắc của thiết bị này.' });
+        }
+
+        // 2. Gọi Model để lấy dữ liệu
+        const rules = await AlertRule.findByDeviceId(deviceId);
         
-        res.json(rows);
+        res.json(rules);
     } catch (err) {
+        console.error('Error getting rules:', err);
         res.status(500).json({ error: 'Lỗi máy chủ khi lấy quy tắc cảnh báo.' });
     }
 };
 
-//Cập nhật cảnh báo
-exports.updateRule = async (req, res) => {
+// Cập nhật cảnh báo
+export const updateRule = async (req, res) => {
     const { ruleId } = req.params;
-    const { parameter, operator, threshold, message, is_active } = req.body;
+    const { metric_type, condition, threshold, email_to, is_enabled } = req.body;
     const userId = req.user.id;
-    
-    try {
-        // Cập nhật quy tắc và JOIN với devices để đảm bảo người dùng có quyền
-        const query = `
-            UPDATE alert_rules r
-            SET 
-                parameter = COALESCE($1, r.parameter), 
-                operator = COALESCE($2, r.operator), 
-                threshold = COALESCE($3, r.threshold), 
-                message = COALESCE($4, r.message), 
-                is_active = COALESCE($5, r.is_active)
-            FROM devices d
-            WHERE r.id = $6 AND r.device_id = d.id AND d.user_id = $7
-            RETURNING r.*;
-        `;
-        const values = [parameter, operator, threshold, message, is_active, ruleId, userId];
-        const { rows } = await db.query(query, values);
 
-        if (rows.length === 0) {
-            return res.status(404).json({ message: 'Quy tắc không tồn tại hoặc bạn không có quyền sửa.' });
+    try {
+        // 1. Tìm quy tắc để lấy device_id
+        const deviceId = await getDeviceIdByRuleId(ruleId);
+        if (!deviceId) {
+            return res.status(404).json({ message: 'Quy tắc không tồn tại.' });
         }
-        res.json(rows[0]);
+
+        // 2. Bảo mật: Kiểm tra thiết bị thuộc rule này có phải của user không
+        const isOwner = await checkDeviceOwnership(deviceId, userId);
+        if (!isOwner) {
+            return res.status(403).json({ message: 'Bạn không có quyền sửa quy tắc này.' });
+        }
+
+        // 3. Gọi Model để cập nhật
+        const updatedRule = await AlertRule.update(ruleId, {
+            metric_type, 
+            condition, 
+            threshold, 
+            email_to, 
+            is_enabled
+        });
+
+        res.json(updatedRule);
     } catch (err) {
+        console.error('Error updating rule:', err);
         res.status(500).json({ error: 'Lỗi máy chủ khi cập nhật quy tắc.' });
     }
 };
 
-//Xóa cảnh báo
-exports.deleteRule = async (req, res) => {
+// Xóa cảnh báo
+export const deleteRule = async (req, res) => {
     const { ruleId } = req.params;
     const userId = req.user.id;
 
     try {
-        // Xóa quy tắc và JOIN với devices để đảm bảo người dùng có quyền
-        const query = `
-            DELETE FROM alert_rules r
-            USING devices d
-            WHERE r.id = $1 AND r.device_id = d.id AND d.user_id = $2
-            RETURNING r.id;
-        `;
-        const { rows } = await db.query(query, [ruleId, userId]);
-
-        if (rows.length === 0) {
-            return res.status(404).json({ message: 'Quy tắc không tồn tại hoặc bạn không có quyền xóa.' });
+        // 1. Tìm quy tắc để lấy device_id
+        const deviceId = await getDeviceIdByRuleId(ruleId);
+        if (!deviceId) {
+            return res.status(404).json({ message: 'Quy tắc không tồn tại.' });
         }
-        
-        // LƯU Ý: Alerts liên quan sẽ tự động bị xóa nhờ ON DELETE CASCADE
+
+        // 2. Bảo mật: Kiểm tra quyền sở hữu
+        const isOwner = await checkDeviceOwnership(deviceId, userId);
+        if (!isOwner) {
+            return res.status(403).json({ message: 'Bạn không có quyền xóa quy tắc này.' });
+        }
+
+        // 3. Gọi Model để xóa
+        await AlertRule.delete(ruleId);
+
         res.status(200).json({ message: 'Quy tắc cảnh báo đã được xóa thành công.' });
     } catch (err) {
+        console.error('Error deleting rule:', err);
         res.status(500).json({ error: 'Lỗi máy chủ khi xóa quy tắc cảnh báo.' });
     }
 };
