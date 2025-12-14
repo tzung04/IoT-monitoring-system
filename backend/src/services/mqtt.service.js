@@ -3,6 +3,7 @@ import Device from '../models/device.model.js';
 import { writeSensorData } from '../config/influxdb.js';
 import AlertRule from '../models/alertRule.model.js'; // Model AlertRule
 import AlertLog from '../models/alertLog.model.js';   // Model AlertLog
+import emailService from './email.service.js';
 
 class MQTTService {
   constructor() {
@@ -22,51 +23,66 @@ class MQTTService {
   }
 
   async checkAlertRules(device, payload) {
-    // Lấy tất cả quy tắc đang kích hoạt cho thiết bị này
+    // Lấy tất cả rule đang kích hoạt cho thiết bị
     const rules = await AlertRule.findEnabledByDeviceId(device.id);
 
     for (const rule of rules) {
       let sensorValue;
-      let metricName = rule.metric_type.toLowerCase();
+      const metricName = rule.metric_type.toLowerCase();
 
-      // Lấy giá trị tương ứng từ payload
+      // 1. Lấy giá trị sensor từ payload
       if (metricName === 'temperature') {
         sensorValue = payload.temperature;
       } else if (metricName === 'humidity') {
         sensorValue = payload.humidity;
       }
-      // Có thể mở rộng thêm các metric khác nếu cần
 
-      // Bỏ qua nếu giá trị không tồn tại trong payload
+      // Nếu payload không có metric này → bỏ qua
       if (sensorValue === undefined || sensorValue === null) {
         continue;
       }
 
-      // 1. Kiểm tra điều kiện cảnh báo
-      const isViolated = this.checkCondition(sensorValue, rule.condition, rule.threshold);
+      // 2. Kiểm tra điều kiện cảnh báo
+      const isViolated = this.checkCondition(
+        sensorValue,
+        rule.condition,
+        rule.threshold
+      );
 
-      if (isViolated) {
-        // 2. Kiểm tra chống spam (Debounce): Chỉ tạo alert nếu alert gần nhất đã xảy ra 5 phút trước
-        const recentAlert = await AlertLog.findRecentByDeviceAndRule(device.id, rule.id, 5);
+      if (!isViolated) continue;
 
-        if (recentAlert) {
-          console.log(`[DEBOUNCE] Alert for ${device.name} skipped (Recent alert found).`);
-          continue; // Bỏ qua nếu đã có cảnh báo gần đây
-        }
+      // 3. Chống spam (debounce 5 phút)
+      const recentAlert = await AlertLog.findRecentByDeviceAndRule(
+        device.id,
+        rule.id,
+        5
+      );
 
-        // 3. Kích hoạt và ghi log
-        const message = `[CẢNH BÁO ${rule.metric_type.toUpperCase()}] ${device.name} vượt ngưỡng: ${sensorValue} ${rule.condition} ${rule.threshold}`;
+      if (recentAlert) {
+        console.log(`[DEBOUNCE] Alert for ${device.name} skipped.`);
+        continue;
+      }
 
-        const alert = await AlertLog.create({
-          device_id: device.id,
-          rule_id: rule.id,
-          value_at_time: sensorValue,
-          message: message,
-        });
+      // 4. Tạo log cảnh báo
+      const message = `[CẢNH BÁO ${rule.metric_type.toUpperCase()}] ${device.name
+        }: ${sensorValue} ${rule.condition} ${rule.threshold}`;
 
-        console.log(`\nALERT TRIGGERED: ${message}`);
+      await AlertLog.create({
+        device_id: device.id,
+        rule_id: rule.id,
+        value_at_time: sensorValue,
+        message: message,
+      });
 
-        // TODO: Gửi thông báo qua email
+      console.log(`\n ALERT TRIGGERED: ${message}`);
+
+      // 5. GỬI EMAIL CẢNH BÁO
+      if (device.user?.email) {
+        await emailService.sendAlertEmail(
+          device.user.email,
+          device.name,
+          `${rule.metric_type} ${rule.condition} ${rule.threshold} (Giá trị hiện tại: ${sensorValue})`
+        );
       }
     }
   }
