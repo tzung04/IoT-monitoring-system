@@ -52,7 +52,8 @@ class Device {
 
   static async findActiveDevices() {
     const result = await pool.query(
-      'SELECT * FROM devices WHERE is_active = true'
+      'SELECT * FROM devices WHERE is_active = $1',
+      [true]
     );
     return result.rows;
   }

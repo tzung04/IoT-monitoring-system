@@ -75,3 +75,12 @@
 1765765914: New connection from 192.168.65.1:22866 on port 1883.
 1765765914: Client <unknown> disconnected due to protocol error.
 1765767262: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1765796330: mosquitto version 2.0.22 starting
+1765796330: Config loaded from /mosquitto/config/mosquitto.conf.
+1765796330: Opening ipv4 listen socket on port 1883.
+1765796330: Opening ipv6 listen socket on port 1883.
+1765796330: Opening websockets listen socket on port 9001.
+1765796330: mosquitto version 2.0.22 running
+1765796346: New connection from 192.168.65.1:45403 on port 1883.
+1765796346: New client connected from 192.168.65.1:45403 as mqttjs_aabdc886 (p2, c1, k60).
+1765797093: Client mqttjs_aabdc886 closed its connection.
