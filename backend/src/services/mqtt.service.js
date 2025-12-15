@@ -58,11 +58,11 @@ class MQTTService {
             message: message,
           });
 
-          console.log(`\n⚠️ ALERT TRIGGERED: ${message}`);
+          console.log(`\nALERT TRIGGERED: ${message}`);
 
           // 4. Gửi Email
           try {
-            const emailSent = await emailService.sendAlertEmail(rule.email_to, device.name, rule);
+            const emailSent = await emailService.sendAlertEmail(rule.email_to, device.name, `${rule.metric_type} ${rule.condition} ${rule.threshold} (Giá trị hiện tại: ${sensorValue})`);
             if (!emailSent) console.warn(`[MAIL FAIL] Could not send alert email to ${rule.email_to}`);
           } catch (mailErr) {
             console.error(`[MAIL ERROR] ${mailErr.message}`);
