@@ -1,12 +1,12 @@
 import pool from '../config/database.js';
 
 class Device {
-  static async create({ user_id, place_id, device_serial, name, topic, is_active = true }) {
+  static async create({ user_id, place_id, mac_address, device_serial, name, topic, is_active = true }) {
     const result = await pool.query(
-      `INSERT INTO devices (user_id, place_id, device_serial, name, topic, is_active) 
-       VALUES ($1, $2, $3, $4, $5, $6) 
+      `INSERT INTO devices (user_id, place_id, mac_address, device_serial, name, topic, is_active) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7) 
        RETURNING *`,
-      [user_id, place_id, device_serial, name, topic, is_active]
+      [user_id, place_id, mac_address, device_serial, name, topic, is_active]
     );
     return result.rows[0];
   }
@@ -30,6 +30,14 @@ class Device {
        LEFT JOIN places p ON d.place_id = p.id 
        WHERE d.id = $1`,
       [id]
+    );
+    return result.rows[0];
+  }
+
+  static async findByMac(mac_address) {
+    const result = await pool.query(
+      'SELECT * FROM devices WHERE mac_address = $1',
+      [mac_address]
     );
     return result.rows[0];
   }

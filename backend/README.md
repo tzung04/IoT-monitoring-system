@@ -103,7 +103,6 @@ node src/config/database.js
 
     HTTP:
       URL: http://influxdb:8086
-      (Chú ý: dùng tên service trong docker, không phải localhost)
 
     InfluxDB Details(xem ở bước 5.1):
       Organization: 
@@ -366,10 +365,15 @@ Content-Type: application/json
 
 ### 1. Thêm device vào database
 
-```sql
--- Chạy trong PostgreSQL
-INSERT INTO devices (user_id, device_serial, name, topic, is_active)
-VALUES (1, 'ABCDABCDABCD', 'Cảm biến kho 1', '/devices/ABCDABCDABCD/data', true);
+```bash
+POST /api/devices
+Content-Type: application/json
+
+{
+  "mac_address": "AABBCCDDEEFF",
+  "name": "Cam bien kho 1",
+  "place_id": "1" (co roi thi them khong thi thoi nhe)
+}
 ```
 
 ### 2. Publish test data qua MQTT
@@ -384,8 +388,9 @@ brew install mosquitto
 ```
 
 **Gửi dữ liệu sensor:**
+topic ban vao database xem nhe
 ```bash
-mosquitto_pub -h localhost -t "/devices/ABCDABCDABCD/data" \
+mosquitto_pub -h localhost -t "/devices/AABBCCDDEEFF/{serial}/data" \
   -m '{"temperature": 25.5, "humidity": 60.3}'
 ```
 
@@ -393,7 +398,7 @@ mosquitto_pub -h localhost -t "/devices/ABCDABCDABCD/data" \
 
 **Trong terminal server:**
 ```
-Message from /devices/ABCDABCDABCD: { temperature: 25.5, humidity: 60.3 }
+Message from /devices/AABBCCDDEEFF: { temperature: 25.5, humidity: 60.3 }
 ✓ Data saved to InfluxDB for device: Cảm biến kho 1
 ```
 
@@ -420,7 +425,7 @@ Message from /devices/ABCDABCDABCD: { temperature: 25.5, humidity: 60.3 }
 
 **devices**
 - id, user_id, place_id
-- device_serial, name, topic
+- mac_address, device_serial, name, topic
 - is_active, created_at
 
 **alert_rules**

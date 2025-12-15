@@ -10,6 +10,7 @@ import { testConnection } from './config/influxdb.js';
 
 // Import routes
 import authRoutes from './routes/auth.routes.js';
+import deviceRoutes from './routes/device.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
 import dataRoutes from './routes/data.routes.js';
 
@@ -43,6 +44,7 @@ app.get('/', (req, res) => {
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/devices', deviceRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/data', dataRoutes);
 

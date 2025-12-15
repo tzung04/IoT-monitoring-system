@@ -1,24 +1,26 @@
-const express = require('express');
+import express from 'express';
+
+import{createDevice, getAllUserDevices, getDeviceById, updateDevice, deleteDevice} from '../controllers/device.controller.js';
+import authMiddleware from '../middleware/auth.middleware.js';
+
 const router = express.Router();
-const deviceController = require('../controllers/deviceController');
-const authMiddleware = require('../middleware/auth.middleware');
 
 // Áp dụng middleware xác thực cho tất cả các route thiết bị
 router.use(authMiddleware); 
 
-//Lấy tất cả thiết bị của người dùng hiện tại
-router.get('/', deviceController.getAllUserDevices);
+// Lấy tất cả thiết bị của người dùng hiện tại
+router.get('/', getAllUserDevices);
 
-//Thêm thiết bị mới
-router.post('/', deviceController.createDevice);
+// Thêm thiết bị mới
+router.post('/', createDevice);
 
-//Lấy chi tiết thiết bị theo ID
-router.get('/:deviceId', deviceController.getDeviceById);
+// Lấy chi tiết thiết bị theo ID
+router.get('/:deviceId', getDeviceById);
 
-//Cập nhật thông tin thiết bị
-router.put('/:deviceId', deviceController.updateDevice);
+// Cập nhật thông tin thiết bị
+router.put('/:deviceId', updateDevice);
 
-//Xóa thiết bị
-router.delete('/:deviceId', deviceController.deleteDevice);
+// Xóa thiết bị
+router.delete('/:deviceId', deleteDevice);
 
-module.exports = router;
+export default router;

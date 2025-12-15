@@ -1,5 +1,5 @@
 import express from 'express';
-import * as alertRuleController from '../controllers/alert.controller.js';
+import {createRule, getRulesByDevice, updateRule, deleteRule} from '../controllers/alert.controller.js';
 import authMiddleware from '../middleware/auth.middleware.js'; 
 
 const router = express.Router();
@@ -8,15 +8,15 @@ const router = express.Router();
 router.use(authMiddleware); 
 
 // Thêm cảnh báo mới
-router.post('/', alertRuleController.createRule);
+router.post('/', createRule);
 
 // Lấy tất cả cảnh báo theo Device ID 
-router.get('/:deviceId', alertRuleController.getRulesByDevice);
+router.get('/:deviceId', getRulesByDevice);
 
 // Cập nhật cảnh báo
-router.put('/:ruleId', alertRuleController.updateRule);
+router.put('/:ruleId', updateRule);
 
 // Xóa cảnh báo
-router.delete('/:ruleId', alertRuleController.deleteRule);
+router.delete('/:ruleId', deleteRule);
 
 export default router;

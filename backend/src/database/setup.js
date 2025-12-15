@@ -60,6 +60,7 @@ async function setupDatabase() {
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         place_id INTEGER REFERENCES places(id) ON DELETE SET NULL,
+        mac_address VARCHAR(100) UNIQUE NOT NULL,
         device_serial VARCHAR(100) UNIQUE NOT NULL,
         name VARCHAR(100) NOT NULL,
         topic VARCHAR(255) NOT NULL,
