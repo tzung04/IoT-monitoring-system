@@ -28,3 +28,50 @@
 1764597254: Saving in-memory database to /mosquitto/data//mosquitto.db.
 1764599055: Saving in-memory database to /mosquitto/data//mosquitto.db.
 1764603479: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1765765460: mosquitto version 2.0.22 starting
+1765765460: Config loaded from /mosquitto/config/mosquitto.conf.
+1765765460: Opening ipv4 listen socket on port 1883.
+1765765460: Opening ipv6 listen socket on port 1883.
+1765765460: Opening websockets listen socket on port 9001.
+1765765460: mosquitto version 2.0.22 running
+1765765910: New connection from 192.168.65.1:22847 on port 1883.
+1765765910: Client <unknown> disconnected due to protocol error.
+1765765910: New connection from 192.168.65.1:22848 on port 1883.
+1765765910: Client <unknown> disconnected due to protocol error.
+1765765910: New connection from 192.168.65.1:22849 on port 1883.
+1765765910: Client <unknown> disconnected due to protocol error.
+1765765910: New connection from 192.168.65.1:22850 on port 1883.
+1765765910: Client <unknown> disconnected due to protocol error.
+1765765911: New connection from 192.168.65.1:22851 on port 1883.
+1765765911: Client <unknown> disconnected due to protocol error.
+1765765911: New connection from 192.168.65.1:22852 on port 1883.
+1765765911: Client <unknown> disconnected due to protocol error.
+1765765911: New connection from 192.168.65.1:22853 on port 1883.
+1765765911: Client <unknown> disconnected due to protocol error.
+1765765911: New connection from 192.168.65.1:22854 on port 1883.
+1765765911: Client <unknown> disconnected due to protocol error.
+1765765911: New connection from 192.168.65.1:22855 on port 1883.
+1765765911: Client <unknown> disconnected due to protocol error.
+1765765911: New connection from 192.168.65.1:22856 on port 1883.
+1765765911: Client <unknown> disconnected due to protocol error.
+1765765913: New connection from 192.168.65.1:22857 on port 1883.
+1765765913: Client <unknown> disconnected due to protocol error.
+1765765913: New connection from 192.168.65.1:22858 on port 1883.
+1765765913: Client <unknown> disconnected due to protocol error.
+1765765913: New connection from 192.168.65.1:22859 on port 1883.
+1765765913: Client <unknown> disconnected due to protocol error.
+1765765913: New connection from 192.168.65.1:22860 on port 1883.
+1765765913: Client <unknown> disconnected due to protocol error.
+1765765913: New connection from 192.168.65.1:22861 on port 1883.
+1765765913: Client <unknown> disconnected due to protocol error.
+1765765913: New connection from 192.168.65.1:22862 on port 1883.
+1765765913: Client <unknown> disconnected due to protocol error.
+1765765914: New connection from 192.168.65.1:22863 on port 1883.
+1765765914: Client <unknown> disconnected due to protocol error.
+1765765914: New connection from 192.168.65.1:22864 on port 1883.
+1765765914: Client <unknown> disconnected due to protocol error.
+1765765914: New connection from 192.168.65.1:22865 on port 1883.
+1765765914: Client <unknown> disconnected due to protocol error.
+1765765914: New connection from 192.168.65.1:22866 on port 1883.
+1765765914: Client <unknown> disconnected due to protocol error.
+1765767262: Saving in-memory database to /mosquitto/data//mosquitto.db.

@@ -16,7 +16,7 @@ class Device{
       `SELECT * FROM devices WHERE user_id = $1 ORDER BY created_at DESC`,
       [user_id]
     );
-    return result.rows[0];
+    return result.rows;
   }
 
   static async findById(device_id){
@@ -29,10 +29,18 @@ class Device{
 
   static async findBySerial(device_serial){
     const result = await pool.query(
-      `SELECT * FROM devices WHERE id = $1`,
+      `SELECT * FROM devices WHERE device_serial = $1`,
       [device_serial]
     );
     return result.rows[0];
+  }
+
+  static async findActiveDevices(){
+    const result = await pool.query(
+      `SELECT * FROM devices WHERE is_active = $1`,
+      [true]
+    );
+    return result.rows;
   }
 
   static async update(deviceId, {place_id,name,topic,is_active} ){
