@@ -3,6 +3,7 @@ import Device from '../models/device.model.js';
 import { writeSensorData } from '../config/influxdb.js';
 import AlertRule from '../models/alertRule.model.js'; // Model AlertRule
 import AlertLog from '../models/alertLog.model.js';   // Model AlertLog
+import emailService from '../services/email.service.js'
 
 class MQTTService {
   constructor() {
@@ -67,6 +68,14 @@ class MQTTService {
         console.log(`\nALERT TRIGGERED: ${message}`);
 
         // TODO: Gửi thông báo qua email
+        // Gửi email cảnh báo
+        const emailSent = await emailService.sendAlertEmail(rule.email_to, device.name, rule);
+
+        if (!emailSent) {
+          return res.status(500).json({ 
+            message: 'Failed to send email. Please try again later.' 
+          });
+        }
       }
     }
   }
