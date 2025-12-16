@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import useAuth from "../../hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { trackEvent } from "../../observability/faro";
+import authService from "../../services/auth.service"; // Import service
 
 const LoginForm = () => {
   const { login } = useAuth();
@@ -9,22 +10,36 @@ const LoginForm = () => {
 
   const [form, setForm] = useState({ username: "", password: "" });
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false); // UI loading state
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
+    // Xóa lỗi khi người dùng nhập lại
+    if (error) setError("");
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
+    setError("");
 
-    // Giả lập xác thực (sẽ thay bằng API thật ở tuần 2)
-    if (form.username === "admin" && form.password === "123456") {
-      login("fake-jwt-token", { username: form.username });
-      trackEvent("auth_login_success", { method: "local" });
-      navigate("/");
-    } else {
-      setError("Sai tài khoản hoặc mật khẩu");
-      trackEvent("auth_login_failed", { method: "local" });
+    try {
+      // Gọi API thực tế
+      const data = await authService.login(form.username, form.password);
+      
+      // Backend trả về { user, token }
+      if (data.token && data.user) {
+        login(data.token, data.user);
+        trackEvent("auth_login_success", { method: "api" });
+        navigate("/");
+      }
+    } catch (err) {
+      // Xử lý lỗi từ backend trả về (thường là err.response.data.message)
+      const msg = err.response?.data?.message || "Đăng nhập thất bại. Vui lòng thử lại.";
+      setError(msg);
+      trackEvent("auth_login_failed", { method: "api", error: msg });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -49,7 +64,9 @@ const LoginForm = () => {
             type="text"
             value={form.username}
             onChange={handleChange}
-            style={{ width: "100%", padding: "8px" }}
+            style={{ width: "100%", padding: "8px", boxSizing: "border-box" }}
+            required
+            disabled={loading}
           />
         </div>
         <div style={{ marginBottom: "10px" }}>
@@ -59,28 +76,32 @@ const LoginForm = () => {
             type="password"
             value={form.password}
             onChange={handleChange}
-            style={{ width: "100%", padding: "8px" }}
+            style={{ width: "100%", padding: "8px", boxSizing: "border-box" }}
+            required
+            disabled={loading}
           />
         </div>
 
         {error && (
-          <p style={{ color: "red", textAlign: "center", marginBottom: "8px" }}>
+          <p style={{ color: "red", textAlign: "center", marginBottom: "8px", fontSize: "14px" }}>
             {error}
           </p>
         )}
 
         <button
           type="submit"
+          disabled={loading}
           style={{
             width: "100%",
             padding: "10px",
-            backgroundColor: "#1976d2",
+            backgroundColor: loading ? "#90caf9" : "#1976d2",
             color: "#fff",
             border: "none",
             borderRadius: "4px",
+            cursor: loading ? "not-allowed" : "pointer",
           }}
         >
-          Đăng nhập
+          {loading ? "Đang xử lý..." : "Đăng nhập"}
         </button>
       </form>
     </div>
