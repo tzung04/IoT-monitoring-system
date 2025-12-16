@@ -59,42 +59,58 @@ class EmailService {
     }
   }
 
-  async sendAlertEmail(email, deviceName, rule){
+  async sendAlertEmail(email, deviceName, message) {
     try {
-      const mailOptions = {
-        from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
-        to: email,
-        subject: '[CẢNH BÁO] Từ hệ thống giám sát',
-        html: `
-          <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">Xin chào!</h2>
-            <p style="font-size: 16px; color: #555;">
-              Có 1 thiết bị đã vượt ngưỡng cảnh báo mà bạn đã đặt ra.
-            </p>
-            <div style="background-color: #f5f5f5; padding: 20px; border-radius: 5px; margin: 20px 0;">
-              <p style="font-size: 14px; color: #666; margin: 0 0 10px 0;">
-                Thiêt bị có tên ${deviceName} đã kích hoạt cảnh báo ${rule}
-              </p>
-            </div>
-            <p style="font-size: 14px; color: #555;">
-              Hãy kiểm tra có chuyện gì đang xảy ra để đảm bảo hệ thống hoạt động ổn định.
-            </p>
-            <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
-            <p style="font-size: 12px; color: #999;">
-              Email này được gửi tự động từ hệ thống giám sát IoT.
-            </p>
-          </div>
-        `
-      };
 
-      const info = await this.transporter.sendMail(mailOptions);
-      console.log('✓ Alert email sent:', info.messageId);
-      return true;
+        const timeString = new Date().toLocaleString('vi-VN');
+
+        const mailOptions = {
+            from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+            to: email,
+            subject: `[CẢNH BÁO] ${deviceName} - Phát hiện bất thường`,
+            html: `
+            <div style="font-family: 'Helvetica Neue', Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e0e0e0;">
+                
+                <div style="border-bottom: 2px solid #d32f2f; padding-bottom: 15px; margin-bottom: 20px;">
+                    <h2 style="color: #d32f2f; margin: 0;"> Cảnh báo thiết bị</h2>
+                    <p style="color: #666; font-size: 13px; margin-top: 5px;">Thời gian: ${timeString}</p>
+                </div>
+
+                <p style="font-size: 16px; color: #333;">
+                    Xin chào, hệ thống giám sát vừa phát hiện một thiết bị vượt ngưỡng cho phép.
+                </p>
+
+                <div style="background-color: #fff4f4; padding: 20px; border-radius: 8px; border-left: 5px solid #d32f2f; margin: 20px 0;">
+                    <p style="font-size: 15px; color: #333; margin: 0 0 10px 0;">
+                        <strong>Thiết bị:</strong> ${deviceName}
+                    </p>
+                    <p style="font-size: 15px; color: #333; margin: 0;">
+                        <strong>Điều kiện vi phạm:</strong> <span style="font-family: monospace; font-weight: bold; font-size: 1.1em; color: #d32f2f;">${message}</span>
+                    </p>
+                </div>
+
+                <p style="font-size: 14px; color: #555;">
+                    Vui lòng kiểm tra thiết bị ngay lập tức để đảm bảo an toàn và hiệu suất hệ thống.
+                </p>
+
+                <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+                
+                <p style="font-size: 12px; color: #999; text-align: center;">
+                    Email này được gửi tự động từ hệ thống giám sát IoT.<br>
+                    Vui lòng không trả lời email này.
+                </p>
+            </div>
+            `
+        };
+
+        const info = await this.transporter.sendMail(mailOptions);
+        console.log(`✓ Alert email sent to ${email}: ${info.messageId}`);
+        return true;
     } catch (err) {
-      console.error('Error sending email:', err);
-      return false;
+        console.error('Error sending alert email:', err);
+        return false;
     }
-  }
+}
 
   async testConnection() {
     try {

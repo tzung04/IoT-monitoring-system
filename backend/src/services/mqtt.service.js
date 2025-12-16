@@ -13,24 +13,36 @@ class MQTTService {
   }
 
 
-  checkCondition(value, operator, threshold) {
-    switch (operator) {
-      case '>': return value > threshold;
-      case '<': return value < threshold;
-      case '=': return value === threshold;
-      case '>=': return value >= threshold;
-      case '<=': return value <= threshold;
+  checkCondition(value, condition, threshold) {
+    switch (condition) {
+      case 'greater_than': return value > threshold;
+      case 'less_than': return value < threshold;
+      case 'equal': return value === threshold;
+      case 'not_equal': return value !== threshold;
+      case 'greater_than_or_equal': return value >= threshold;
+      case 'less_than_or_equal': return value <= threshold;
       default: return false;
     }
   }
 
   async checkAlertRules(device, payload) {
     try {
+      const conditionMap = {
+            'greater_than': '>',
+            'less_than': '<',
+            'equal': '=',
+            'not_equal': '!=',
+            'greater_than_or_equal': '>=',
+            'less_than_or_equal': '<=',
+        };
+      
       const rules = await AlertRule.findEnabledByDeviceId(device.id);
 
       for (const rule of rules) {
         let sensorValue;
         let metricName = rule.metric_type.toLowerCase();
+        
+        const conditionSymbol = conditionMap[rule.condition] || rule.condition;
 
         if (metricName === 'temperature') sensorValue = payload.temperature;
         else if (metricName === 'humidity') sensorValue = payload.humidity;
@@ -60,9 +72,13 @@ class MQTTService {
 
           console.log(`\nALERT TRIGGERED: ${message}`);
 
+          const ruleDisplay = `
+          ${rule.metric_type} ${conditionSymbol} ${rule.threshold}
+          (Giá trị vượt ngưỡng: ${sensorValue})
+          `;
           // 4. Gửi Email
           try {
-            const emailSent = await emailService.sendAlertEmail(rule.email_to, device.name, `${rule.metric_type} ${rule.condition} ${rule.threshold} (Giá trị hiện tại: ${sensorValue})`);
+            const emailSent = await emailService.sendAlertEmail(rule.email_to, device.name, ruleDisplay);
             if (!emailSent) console.warn(`[MAIL FAIL] Could not send alert email to ${rule.email_to}`);
           } catch (mailErr) {
             console.error(`[MAIL ERROR] ${mailErr.message}`);

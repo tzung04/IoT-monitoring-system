@@ -13,6 +13,8 @@ import authRoutes from './routes/auth.routes.js';
 import deviceRoutes from './routes/device.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
 import dataRoutes from './routes/data.routes.js';
+import alertRoutes from './routes/alert.routes.js';
+import historyRoutes from './routes/history.routes.js';
 
 dotenv.config();
 const app = express();
@@ -47,6 +49,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/devices', deviceRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/data', dataRoutes);
+app.use('/api/alert', alertRoutes);
+app.use('/api/history', historyRoutes);
 
 // 404 handler
 app.use((req, res) => {

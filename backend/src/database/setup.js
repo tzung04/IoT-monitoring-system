@@ -1,6 +1,5 @@
 import pool from "../config/database.js";
 import { fileURLToPath } from "url";
-import path from "path";
 
 async function setupDatabase() {
   const client = await pool.connect();
@@ -22,7 +21,7 @@ async function setupDatabase() {
     // Create alert_condition enum
     await client.query(`
       DO $$ BEGIN
-        CREATE TYPE alert_condition AS ENUM ('greater_than', 'less_than', 'equal', 'not_equal');
+        CREATE TYPE alert_condition AS ENUM ('greater_than', 'less_than', 'equal', 'not_equal', 'greater_than_or_equal', 'less_than_or_equal');
       EXCEPTION
         WHEN duplicate_object THEN null;
       END $$;
