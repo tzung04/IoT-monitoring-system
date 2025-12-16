@@ -244,6 +244,51 @@ nhớ tạo 1 user có 1 device xác định topic, bắn dữ liệu vô topic 
  có thể dùng dashboardRoutes để lấy url
 http://localhost:3001/d/abc123xyz/iot-monitoring?orgId=1&var-user_id=1&theme=light&from=now-15m&to=now&timezone=browser&refresh=5s
 
+### Huong dan tao va kich hoat thiet bi
+#### 1. Them thiet bi logic
+```bash
+POST /api/devices/
+Content-Type: application/json
+
+{
+  "name": "Cam bien kho 1",
+  "mac_address": "AABBCCDDEEFF" (dia chi mac lay in tren thiet bi, nguoi dung tu nhap vao)
+}
+```
+**response**
+```json
+{
+    "id": 1,
+    "user_id": 1,
+    "place_id": null,
+    "mac_address": "AABBCCDDEEFF",
+    "device_serial": "E248D27E014AAAC6",
+    "name": "Cam bien kho 1",
+    "topic": "/devices/AABBCCDDEEFF/E248D27E014AAAC6/data",
+    "is_active": false,
+    "created_at": "2025-12-16T01:23:10.933Z"
+}
+```
+#### 2. Ket noi voi thiet bi vat ly
+Đến bước này sẽ do esp32 làm việc với server
+Cụ thể như sau:
+- Cấp nguồn cho esp32
+- esp32 kết nối wifi, kết nối mqtt broker sau đó subscribe topic system/provisioning/${mac}/res để chờ phản hồi từ server
+- esp32 gửi message {"mac": "AABBCCDDEEFF"} đến topic: system/provisioning/req
+- server active device logic, gửi topic nhận data đã tạo về cho esp32 qua topic system/provisioning/${mac}/res
+- esp32 nhận được res thì bắt đầu publish data vào topic server gửi về (/devices/AABBCCDDEEFF/E248D27E014AAAC6/data)
+
+thế là xong!
+
+[Nếu không có esp32 bạn dùng mqtt client tuỳ ý giả làm esp32 mà làm nhé]
+vi du: 
+1. send req: 
+ mosquitto_pub -h localhost -p 1884 -t system/provisioning/req -m '{"mac": "AABBCCDDEEFF"}'
+2. recv res: 
+ mosquitto_sub -h localhost -p 1884 -t system/provisioning/AABBCCDDEEFF/res
+{"status":"success","topic":"/devices/AABBCCDDEEFF/E248D27E014AAAC6/data"} (dong nay xuat hien khi ong vua publish o phia tren!)
+
+
 
 ### Bước 6: Khởi động Server
 
