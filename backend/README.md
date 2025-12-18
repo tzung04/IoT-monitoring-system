@@ -77,7 +77,7 @@ CREATE DATABASE iot_monitoring;
 
 **Chạy migration để tạo tables:**
 ```bash
-node src/config/database.js
+node src/database/setup.js
 ```
 
 ### Bước 5.1: Setup InfluxDB
