@@ -15,10 +15,17 @@ export const login = async (username, password) => {
 
 export const register = async (username, email, password) => {
   try {
+    console.log('Calling register API with:', { username, email });
     const resp = await api.post(`${BASE}/register`, { username, email, password });
+    console.log('Register response:', resp.data);
     return resp.data;
   } catch (err) {
-    console.error("Register error", err);
+    console.error("Register error:", {
+      message: err.message,
+      status: err.response?.status,
+      data: err.response?.data,
+      stack: err.stack
+    });
     throw err;
   }
 };
@@ -44,9 +51,33 @@ export const changePassword = async (currentPassword, newPassword) => {
   }
 };
 
+export const forgotPassword = async (email) => {
+  try {
+    // Gửi email yêu cầu reset password
+    const resp = await api.post(`${BASE}/forgot-password`, { email });
+    return resp.data;
+  } catch (err) {
+    console.error("Forgot password error", err);
+    throw err;
+  }
+};
+
+export const resetPassword = async (email, code, newPassword) => {
+  try {
+    // Reset password với email, code, và password mới
+    const resp = await api.post(`${BASE}/reset-password`, { email, code, newPassword });
+    return resp.data;
+  } catch (err) {
+    console.error("Reset password error", err);
+    throw err;
+  }
+};
+
 export default {
   login,
   register,
   getCurrentUser,
   changePassword,
+  forgotPassword,
+  resetPassword,
 };
