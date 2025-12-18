@@ -15,7 +15,6 @@ Use Cases:
 1. Quản lý người dùng
    - Đăng nhập
    - Đăng xuất
-   - Phân quyền truy cập
 
 2. Hiển thị dữ liệu
    - Xem dashboard tổng quan
@@ -32,7 +31,6 @@ Use Cases:
 4. Quản lý thiết bị
    - Thêm/xóa/sửa thiết bị
    - Theo dõi trạng thái thiết bị
-   - Cấu hình thiết bị
 
 5. Thu thập dữ liệu
    - Nhận dữ liệu từ cảm biến
@@ -50,12 +48,11 @@ Use Cases:
 •	JWT cho authentication
 3.2. Frontend
 •	React.js với hooks
-•	Chart.js hoặc Recharts để vẽ biểu đồ
-•	WebSocket để hiển thị realtime
+•	Grafana để vẽ biểu đồ
 •	Material-UI hoặc Ant Design cho UI components
 3.3. Database
 •	InfluxDB cho dữ liệu time series
-•	PostgreSQL cho dữ liệu như user, devices, rules, …
+•	PostgreSQL cho dữ liệu như users, devices, alertRules, …
 3.4. DevOps
 •	Docker & Docker Compose
 •	Git & GitHub cho version control
@@ -69,7 +66,6 @@ Use Cases:
 Quy tắc Git
 •	Main branch: main (protected)
 •	Develop branch: develop
-•	Feature branches: feature/backend, feature/frontend
 6. KIẾN TRÚC HỆ THỐNG
 monitoring-iot-web/
 ├── backend/
@@ -96,15 +92,14 @@ Phan Trí Dũng: Backend & MQTT
 •	Thiết lập MQTT broker
 •	Xử lý data ingestion
 •	Kết nối InfluxDB
-Lê Văn Được: Backend & API
 •	Authentication system
+Lê Văn Được: Backend & API
+•	Alert notifications
+•	ThresholdSettings
 •	REST API development
 •	Data export features
 Vũ Viết Dũng: Frontend & UI
 •	React components
-•	Real-time charts
-•	Dashboard design
-Vũ Mạnh Dũng: Frontend & Integration
-•	WebSocket integration
-•	Alert notifications
-•	ThresholdSettings
+•	Grafana
+Vũ Mạnh Dũng: 
+

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import {  
-  handlerRegister, handlerLogin,
+  handlerRegister, handlerLogin, handlerLogout,
   handlerGetMe, handlerChangePassword,
   handlerForgotPassword, handlerResetPassword
 } from '../controllers/auth.controller.js';
@@ -17,6 +17,7 @@ router.post('/reset-password', handlerResetPassword);
 // Protected routes
 router.get('/me', authMiddleware, handlerGetMe);
 router.put('/change-password', authMiddleware, handlerChangePassword);
+router.post('/logout', authMiddleware, handlerLogout);
 
 
 export default router;
