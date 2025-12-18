@@ -1,6 +1,5 @@
 import React, { useState } from "react";
-import useAuth from "../../hooks/useAuth";
-import { useNavigate, Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { trackEvent } from "../../observability/faro";
 import authService from "../../services/auth.service";
 
@@ -20,8 +19,14 @@ const styles = {
     textAlign: "center",
     fontSize: "24px",
     fontWeight: "600",
-    marginBottom: "30px",
+    marginBottom: "12px",
     color: "#333",
+  },
+  subtitle: {
+    textAlign: "center",
+    fontSize: "13px",
+    color: "#666",
+    marginBottom: "24px",
   },
   form: {
     display: "flex",
@@ -47,10 +52,6 @@ const styles = {
     fontFamily: "inherit",
     transition: "border-color 0.2s",
   },
-  inputFocus: {
-    outline: "none",
-    borderColor: "#1976d2",
-  },
   error: {
     color: "#d32f2f",
     fontSize: "13px",
@@ -69,6 +70,11 @@ const styles = {
     borderRadius: "4px",
     border: "1px solid #4caf50",
   },
+  fieldError: {
+    color: "#d32f2f",
+    fontSize: "12px",
+    marginTop: "2px",
+  },
   button: {
     padding: "12px",
     fontSize: "16px",
@@ -84,78 +90,76 @@ const styles = {
     backgroundColor: "#90caf9",
     cursor: "not-allowed",
   },
-  linksContainer: {
+  link: {
+    textAlign: "center",
     marginTop: "16px",
-    display: "flex",
-    justifyContent: "space-between",
     fontSize: "13px",
   },
-  link: {
+  linkElement: {
     color: "#1976d2",
     textDecoration: "none",
     cursor: "pointer",
+    fontWeight: "600",
     transition: "color 0.2s",
   },
   linkHover: {
     color: "#1565c0",
   },
-  registerLink: {
-    textAlign: "center",
-    marginTop: "20px",
-    fontSize: "14px",
-    color: "#666",
-  },
 };
 
-const LoginForm = () => {
-  const { login } = useAuth();
+const ForgotPasswordForm = () => {
   const navigate = useNavigate();
-
-  const [form, setForm] = useState({ username: "", password: "" });
+  const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-    // Clear error when user starts typing
+    setEmail(e.target.value);
     if (error) setError("");
     if (success) setSuccess("");
   };
 
+  const validateEmail = (value) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError("");
     setSuccess("");
 
-    // Basic validation
-    if (!form.username.trim() || !form.password.trim()) {
-      setError("Tên đăng nhập và mật khẩu không được để trống");
-      setLoading(false);
+    if (!email.trim()) {
+      setError("Email không được để trống");
       return;
     }
 
+    if (!validateEmail(email)) {
+      setError("Email không hợp lệ");
+      return;
+    }
+
+    setLoading(true);
+
     try {
-      const data = await authService.login(form.username, form.password);
+      const data = await authService.forgotPassword(email);
 
-      if (data.token && data.user) {
-        setSuccess("Đăng nhập thành công! Đang chuyển hướng...");
-        login(data.token, data.user);
-        trackEvent("auth_login_success", { method: "api" });
+      setSuccess(
+        "Email với mã reset đã được gửi. Vui lòng kiểm tra hộp thư của bạn. Chuyển hướng trong 5 giây..."
+      );
+      trackEvent("forgot_password_sent", { email });
 
-        // Redirect after showing success message
-        setTimeout(() => {
-          navigate("/");
-        }, 500);
-      }
+      // Redirect to reset password page after showing success
+      setTimeout(() => {
+        navigate("/reset-password");
+      }, 5000);
     } catch (err) {
       const errorMsg =
-        err.response?.data?.message || "Đăng nhập thất bại. Vui lòng thử lại.";
+        err.response?.data?.message ||
+        "Không thể gửi email. Vui lòng thử lại.";
       setError(errorMsg);
-      trackEvent("auth_login_failed", { method: "api", error: errorMsg });
-      console.error("Login error:", err);
+      trackEvent("forgot_password_failed", { error: errorMsg });
+      console.error("Forgot password error:", err);
     } finally {
       setLoading(false);
     }
@@ -163,48 +167,29 @@ const LoginForm = () => {
 
   return (
     <div style={styles.container}>
-      <h2 style={styles.title}>Đăng nhập</h2>
+      <h2 style={styles.title}>Quên mật khẩu?</h2>
+      <p style={styles.subtitle}>
+        Nhập email của bạn để nhận mã reset mật khẩu
+      </p>
 
       <form onSubmit={handleSubmit} style={styles.form}>
-        {/* Username Input */}
+        {/* Email Input */}
         <div style={styles.formGroup}>
-          <label htmlFor="username" style={styles.label}>
-            Tên đăng nhập
+          <label htmlFor="email" style={styles.label}>
+            Email
           </label>
           <input
-            id="username"
-            name="username"
-            type="text"
-            value={form.username}
+            id="email"
+            type="email"
+            value={email}
             onChange={handleChange}
             disabled={loading}
             style={{
               ...styles.input,
               opacity: loading ? 0.6 : 1,
             }}
-            placeholder="Nhập tên đăng nhập"
-            required
+            placeholder="your@email.com"
             autoFocus
-          />
-        </div>
-
-        {/* Password Input */}
-        <div style={styles.formGroup}>
-          <label htmlFor="password" style={styles.label}>
-            Mật khẩu
-          </label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            value={form.password}
-            onChange={handleChange}
-            disabled={loading}
-            style={{
-              ...styles.input,
-              opacity: loading ? 0.6 : 1,
-            }}
-            placeholder="Nhập mật khẩu"
             required
           />
         </div>
@@ -224,31 +209,25 @@ const LoginForm = () => {
             ...(loading ? styles.buttonDisabled : {}),
           }}
         >
-          {loading ? "Đang xử lý..." : "Đăng nhập"}
+          {loading ? "Đang gửi..." : "Gửi mã reset"}
         </button>
       </form>
 
       {/* Links */}
-      <div style={styles.linksContainer}>
+      <div style={styles.link}>
         <Link
-          to="/forgot-password"
-          style={styles.link}
-          onMouseEnter={(e) => (e.target.style.color = styles.linkHover.color)}
-          onMouseLeave={(e) => (e.target.style.color = styles.link.color)}
+          to="/login"
+          style={styles.linkElement}
+          onMouseEnter={(e) =>
+            (e.target.style.color = styles.linkHover.color)
+          }
+          onMouseLeave={(e) => (e.target.style.color = styles.linkElement.color)}
         >
-          Quên mật khẩu?
-        </Link>
-        <Link
-          to="/register"
-          style={styles.link}
-          onMouseEnter={(e) => (e.target.style.color = styles.linkHover.color)}
-          onMouseLeave={(e) => (e.target.style.color = styles.link.color)}
-        >
-          Đăng ký
+          Quay lại đăng nhập
         </Link>
       </div>
     </div>
   );
 };
 
-export default LoginForm;
+export default ForgotPasswordForm;

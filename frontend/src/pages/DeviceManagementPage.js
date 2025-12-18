@@ -29,11 +29,21 @@ import { trackEvent } from "../observability/faro";
 const DeviceManagementPage = () => {
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ name: "", type: "", location: "" });
+  const [form, setForm] = useState({ 
+    name: "", 
+    mac_address: "", 
+    place_id: "",
+    description: ""
+  });
+  const [formErrors, setFormErrors] = useState({});
   const [error, setError] = useState("");
-  const [filters, setFilters] = useState({ search: "", type: "", status: "" });
+  const [filters, setFilters] = useState({ search: "", status: "" });
   const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({ name: "", type: "", location: "", status: "" });
+  const [editForm, setEditForm] = useState({ 
+    name: "", 
+    description: "",
+    is_active: false 
+  });
   const [toast, setToast] = useState({ open: false, message: "", severity: "info" });
   const navigate = useNavigate();
 
@@ -72,7 +82,34 @@ const DeviceManagementPage = () => {
     }
   });
 
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm({ ...form, [name]: value });
+    // Clear error for this field when user starts typing
+    if (formErrors[name]) {
+      setFormErrors({ ...formErrors, [name]: "" });
+    }
+  };
+
+  const validateForm = () => {
+    const errors = {};
+    
+    if (!form.name.trim()) {
+      errors.name = "Tên thiết bị là bắt buộc";
+    } else if (form.name.length < 3) {
+      errors.name = "Tên phải có ít nhất 3 ký tự";
+    }
+    
+    if (!form.mac_address.trim()) {
+      errors.mac_address = "Địa chỉ MAC là bắt buộc";
+    } else if (!/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(form.mac_address)) {
+      errors.mac_address = "Định dạng MAC không hợp lệ (VD: AA:BB:CC:DD:EE:FF)";
+    }
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleFilterChange = (e) => {
     const next = { ...filters, [e.target.name]: e.target.value };
     setFilters(next);
@@ -82,27 +119,45 @@ const DeviceManagementPage = () => {
     });
   };
 
+
   const handleAdd = async (e) => {
     e.preventDefault();
     setError("");
-    if (!form.name) {
-      setError("Tên thiết bị là bắt buộc");
+    
+    if (!validateForm()) {
       return;
     }
+
+    setLoading(true);
     try {
-      const created = await deviceService.createDevice(form);
+      const created = await deviceService.createDevice({
+        name: form.name,
+        mac_address: form.mac_address.toUpperCase(),
+        place_id: form.place_id || null
+      });
+      
       if (created && created.id) {
         setDevices((d) => upsertDevice(d, created));
-        trackEvent("device_added", { id: created.id, type: created.type || "unknown" });
-      } else {
-        await load();
+        trackEvent("device_added", { id: created.id });
+        setToast({ 
+          open: true, 
+          message: `Đã thêm thiết bị "${created.name}"`, 
+          severity: "success" 
+        });
       }
-      setForm({ name: "", type: "", location: "" });
-      setToast({ open: true, message: "Đã thêm thiết bị", severity: "success" });
+      setForm({ name: "", mac_address: "", place_id: "", description: "" });
+      setFormErrors({});
     } catch (err) {
       console.error("Add device error:", err);
-      setError(err.response?.data?.error || "Không thể thêm thiết bị");
-      setToast({ open: true, message: "Thêm thiết bị thất bại", severity: "error" });
+      const errorMsg = err.message || "Không thể thêm thiết bị";
+      setError(errorMsg);
+      setToast({ 
+        open: true, 
+        message: errorMsg, 
+        severity: "error" 
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -123,276 +178,320 @@ const DeviceManagementPage = () => {
     setEditingId(device.id);
     setEditForm({
       name: device.name,
-      type: device.type,
-      location: device.location,
-      status: device.status || "offline",
+      description: device.description || "",
+      is_active: device.is_active || false,
     });
     trackEvent("device_edit_start", { id: device.id });
   };
 
   const cancelEdit = () => {
     setEditingId(null);
-    setEditForm({ name: "", type: "", location: "", status: "" });
+    setEditForm({ name: "", description: "", is_active: false });
   };
 
   const saveEdit = async (id) => {
+    if (!editForm.name.trim()) {
+      setError("Tên thiết bị không được để trống");
+      return;
+    }
+
     try {
       const updated = await deviceService.updateDevice(id, editForm);
       setDevices((prev) => prev.map((d) => (d.id === id ? updated : d)));
       cancelEdit();
-      trackEvent("device_updated", { id, status: editForm.status, type: editForm.type || "unknown" });
+      trackEvent("device_updated", { id });
       setToast({ open: true, message: "Đã cập nhật thiết bị", severity: "success" });
     } catch (err) {
       console.error("Update device error", err);
-      setError("Cập nhật không thành công");
-      setToast({ open: true, message: "Cập nhật thiết bị thất bại", severity: "error" });
+      const errorMsg = err.message || "Cập nhật không thành công";
+      setError(errorMsg);
+      setToast({ open: true, message: errorMsg, severity: "error" });
     }
   };
 
   const filteredDevices = useMemo(() => {
-    return devices
-      .filter((d) =>
-        filters.type ? (d.type || "").toLowerCase() === filters.type.toLowerCase() : true
-      )
-      .filter((d) =>
-        filters.status ? (d.status || "offline").toLowerCase() === filters.status.toLowerCase() : true
-      )
-      .filter((d) => {
-        const query = filters.search.trim().toLowerCase();
-        if (!query) return true;
-        return (
-          d.name?.toLowerCase().includes(query) ||
-          d.location?.toLowerCase().includes(query) ||
-          String(d.id).includes(query)
-        );
-      });
+    return devices.filter((d) => {
+      const query = filters.search.trim().toLowerCase();
+      if (!query) return true;
+      return (
+        d.name?.toLowerCase().includes(query) ||
+        d.device_serial?.toLowerCase().includes(query) ||
+        d.mac_address?.toLowerCase().includes(query) ||
+        String(d.id).includes(query)
+      );
+    });
   }, [devices, filters]);
 
   return (
     <>
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      <Typography variant="h5" gutterBottom>
-        Device Management
-      </Typography>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 3, p: 2 }}>
+      <Box>
+        <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
+          🔧 Quản lý Thiết bị
+        </Typography>
+        <Typography variant="body2" color="textSecondary">
+          Tạo, chỉnh sửa và theo dõi các thiết bị IoT của bạn
+        </Typography>
+      </Box>
 
-      <Grid container spacing={2}>
-        <Grid item xs={12} md={4}>
-          <Card>
+      <Grid container spacing={3}>
+        {/* Form thêm thiết bị */}
+        <Grid item xs={12} md={5}>
+          <Card sx={{ height: "100%" }}>
             <CardContent>
-              <Typography variant="subtitle1" gutterBottom>
-                Thêm thiết bị
+              <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+                ➕ Thêm Thiết bị Mới
               </Typography>
-              <Stack component="form" spacing={2} onSubmit={handleAdd}>
+              
+              <Stack component="form" spacing={1.5} onSubmit={handleAdd}>
                 <TextField
-                  label="Tên thiết bị"
+                  label="Tên thiết bị *"
                   name="name"
                   value={form.name}
                   onChange={handleChange}
                   size="small"
+                  fullWidth
+                  placeholder="VD: Cảm biến phòng khách"
+                  error={!!formErrors.name}
+                  helperText={formErrors.name}
                 />
+
                 <TextField
-                  label="Vị trí"
-                  name="location"
-                  value={form.location}
+                  label="Địa chỉ MAC *"
+                  name="mac_address"
+                  value={form.mac_address}
                   onChange={handleChange}
                   size="small"
+                  fullWidth
+                  placeholder="AA:BB:CC:DD:EE:FF"
+                  error={!!formErrors.mac_address}
+                  helperText={formErrors.mac_address}
                 />
-                <Select
-                  name="type"
-                  value={form.type}
+
+                <TextField
+                  label="Vị trí (tuỳ chọn)"
+                  name="place_id"
+                  value={form.place_id}
                   onChange={handleChange}
                   size="small"
-                  displayEmpty
+                  fullWidth
+                  placeholder="VD: 1 (ID vị trí)"
+                  type="number"
+                />
+
+                <TextField
+                  label="Mô tả (tuỳ chọn)"
+                  name="description"
+                  value={form.description}
+                  onChange={handleChange}
+                  size="small"
+                  fullWidth
+                  multiline
+                  rows={2}
+                  placeholder="Ghi chú về thiết bị"
+                />
+
+                <Button 
+                  type="submit" 
+                  variant="contained"
+                  sx={{ mt: 0.5 }}
+                  disabled={loading}
+                  fullWidth
                 >
-                  <MenuItem value="">
-                    <em>Chọn loại thiết bị</em>
-                  </MenuItem>
-                  <MenuItem value="temperature">Cảm biến nhiệt độ</MenuItem>
-                  <MenuItem value="gateway">Gateway</MenuItem>
-                </Select>
-                <Button type="submit" variant="contained">
-                  Thêm
+                  {loading ? "⏳ Đang thêm..." : "➕ Thêm Thiết bị"}
                 </Button>
+
                 {error && (
-                  <Typography color="error" variant="body2">
-                    {error}
-                  </Typography>
+                  <Box sx={{ 
+                    background: "#ffebee", 
+                    p: 1.5, 
+                    borderRadius: 1,
+                    border: "1px solid #ffcdd2"
+                  }}>
+                    <Typography variant="body2" sx={{ color: "#c62828" }}>
+                      ⚠️ {error}
+                    </Typography>
+                  </Box>
                 )}
               </Stack>
             </CardContent>
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={8}>
-          <Card>
-            <CardContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems="center">
-                <TextField
-                  name="search"
-                  placeholder="Tìm kiếm theo tên, vị trí, ID"
-                  value={filters.search}
-                  onChange={handleFilterChange}
-                  size="small"
-                  fullWidth
-                />
-                <Select
-                  name="type"
-                  value={filters.type}
-                  onChange={handleFilterChange}
-                  size="small"
-                  displayEmpty
-                >
-                  <MenuItem value="">
-                    <em>Tất cả loại</em>
-                  </MenuItem>
-                  <MenuItem value="temperature">Cảm biến nhiệt độ</MenuItem>
-                  <MenuItem value="gateway">Gateway</MenuItem>
-                </Select>
-                <Select
-                  name="status"
-                  value={filters.status}
-                  onChange={handleFilterChange}
-                  size="small"
-                  displayEmpty
-                >
-                  <MenuItem value="">
-                    <em>Tất cả trạng thái</em>
-                  </MenuItem>
-                  <MenuItem value="online">Online</MenuItem>
-                  <MenuItem value="offline">Offline</MenuItem>
-                </Select>
-              </Stack>
+        {/* Danh sách thiết bị */}
+        <Grid item xs={12} md={7}>
+          <Stack spacing={2}>
+            {/* Search bar */}
+            <TextField
+              name="search"
+              placeholder="🔍 Tìm kiếm theo tên, MAC, serial hoặc ID..."
+              value={filters.search}
+              onChange={handleFilterChange}
+              size="small"
+              fullWidth
+              sx={{ 
+                "& .MuiOutlinedInput-root": {
+                  borderRadius: 2,
+                }
+              }}
+            />
 
+            {/* Device list */}
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxHeight: "600px", overflowY: "auto" }}>
               {loading ? (
-                <Typography>Đang tải...</Typography>
+                <Typography sx={{ textAlign: "center", py: 4, color: "textSecondary" }}>
+                  ⏳ Đang tải thiết bị...
+                </Typography>
               ) : filteredDevices.length === 0 ? (
-                <Typography>Không có thiết bị.</Typography>
+                <Card sx={{ p: 3, textAlign: "center" }}>
+                  <Typography color="textSecondary">
+                    📭 Không có thiết bị nào. Hãy thêm thiết bị đầu tiên của bạn!
+                  </Typography>
+                </Card>
               ) : (
-                <Box sx={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead>
-                      <tr>
-                        <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #e5e7eb" }}>ID</th>
-                        <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #e5e7eb" }}>Name</th>
-                        <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #e5e7eb" }}>Type</th>
-                        <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #e5e7eb" }}>Location</th>
-                        <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #e5e7eb" }}>Status</th>
-                        <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #e5e7eb" }}>Last seen</th>
-                        <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #e5e7eb" }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredDevices.map((d) => {
-                        const isEditing = editingId === d.id;
-                        return (
-                          <tr key={d.id}>
-                            <td style={{ padding: "8px" }}>{d.id}</td>
-                            <td style={{ padding: "8px" }}>
-                              {isEditing ? (
-                                <TextField
-                                  size="small"
-                                  value={editForm.name}
-                                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                                />
-                              ) : (
-                                d.name
-                              )}
-                            </td>
-                            <td style={{ padding: "8px" }}>
-                              {isEditing ? (
-                                <Select
-                                  size="small"
-                                  value={editForm.type}
-                                  onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}
-                                  displayEmpty
-                                >
-                                  <MenuItem value="">
-                                    <em>Chọn loại</em>
-                                  </MenuItem>
-                                  <MenuItem value="temperature">Cảm biến nhiệt độ</MenuItem>
-                                  <MenuItem value="gateway">Gateway</MenuItem>
-                                </Select>
-                              ) : (
-                                d.type || "-"
-                              )}
-                            </td>
-                            <td style={{ padding: "8px" }}>
-                              {isEditing ? (
-                                <TextField
-                                  size="small"
-                                  value={editForm.location}
-                                  onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
-                                />
-                              ) : (
-                                d.location || "-"
-                              )}
-                            </td>
-                            <td style={{ padding: "8px" }}>
-                              {isEditing ? (
-                                <Select
-                                  size="small"
-                                  value={editForm.status}
-                                  onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-                                >
-                                  <MenuItem value="online">Online</MenuItem>
-                                  <MenuItem value="offline">Offline</MenuItem>
-                                </Select>
-                              ) : (
-                                <Chip
-                                  label={d.status || "offline"}
-                                  color={(d.status || "").toLowerCase() === "online" ? "success" : "default"}
-                                  size="small"
-                                />
-                              )}
-                            </td>
-                            <td style={{ padding: "8px", whiteSpace: "nowrap" }}>
-                              {d.lastSeen ? new Date(d.lastSeen).toLocaleTimeString() : "-"}
-                            </td>
-                            <td style={{ padding: "8px" }}>
-                              {isEditing ? (
-                                <Stack direction="row" spacing={1}>
-                                  <IconButton color="success" size="small" onClick={() => saveEdit(d.id)}>
-                                    <CheckIcon fontSize="small" />
-                                  </IconButton>
-                                  <IconButton color="inherit" size="small" onClick={cancelEdit}>
-                                    <CloseIcon fontSize="small" />
-                                  </IconButton>
-                                </Stack>
-                              ) : (
-                                <Stack direction="row" spacing={1}>
-                                  <Tooltip title="Chi tiết">
-                                    <IconButton
-                                      size="small"
-                                      onClick={() => {
-                                        trackEvent("device_detail_view", { id: d.id });
-                                        navigate(`/devices/${d.id}`);
-                                      }}
-                                    >
-                                      <VisibilityIcon fontSize="small" />
-                                    </IconButton>
-                                  </Tooltip>
-                                  <Tooltip title="Sửa">
-                                    <IconButton size="small" onClick={() => startEdit(d)}>
-                                      <EditIcon fontSize="small" />
-                                    </IconButton>
-                                  </Tooltip>
-                                  <Tooltip title="Xóa">
-                                    <IconButton size="small" color="error" onClick={() => handleDelete(d.id)}>
-                                      <DeleteIcon fontSize="small" />
-                                    </IconButton>
-                                  </Tooltip>
-                                </Stack>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </Box>
+                filteredDevices.map((device) => (
+                  <Card key={device.id} sx={{ 
+                    p: 2, 
+                    border: "2px solid #f0f0f0",
+                    transition: "all 0.2s",
+                    "&:hover": { borderColor: "#667eea", boxShadow: "0 4px 12px rgba(102,126,234,0.15)" }
+                  }}>
+                    {editingId === device.id ? (
+                      <Stack spacing={2}>
+                        <TextField
+                          label="Tên thiết bị"
+                          value={editForm.name}
+                          onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                          size="small"
+                          fullWidth
+                        />
+                        <TextField
+                          label="Mô tả"
+                          value={editForm.description}
+                          onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                          size="small"
+                          fullWidth
+                          multiline
+                          rows={2}
+                        />
+                        <Box sx={{ display: "flex", gap: 1 }}>
+                          <Button 
+                            variant="contained" 
+                            size="small"
+                            onClick={() => saveEdit(device.id)}
+                          >
+                            ✅ Lưu
+                          </Button>
+                          <Button 
+                            variant="outlined" 
+                            size="small"
+                            onClick={cancelEdit}
+                          >
+                            ❌ Hủy
+                          </Button>
+                        </Box>
+                      </Stack>
+                    ) : (
+                      <Box>
+                        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 1.5 }}>
+                          <Box>
+                            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                              {device.name}
+                            </Typography>
+                            <Typography variant="caption" color="textSecondary">
+                              ID: {device.id}
+                            </Typography>
+                          </Box>
+                          <Chip 
+                            label={device.is_active ? "🟢 Hoạt động" : "🔴 Ngừng hoạt động"}
+                            size="small"
+                            sx={{ fontWeight: 600 }}
+                            color={device.is_active ? "success" : "default"}
+                          />
+                        </Box>
+
+                        <Stack spacing={0.5} sx={{ mb: 2, fontSize: "0.875rem" }}>
+                          <Typography variant="body2">
+                            <strong>MAC:</strong> {device.mac_address}
+                          </Typography>
+                          <Typography variant="body2">
+                            <strong>Serial:</strong> {device.device_serial}
+                          </Typography>
+                          {device.description && (
+                            <Typography variant="body2" color="textSecondary">
+                              <strong>Mô tả:</strong> {device.description}
+                            </Typography>
+                          )}
+                          <Typography variant="body2" color="textSecondary">
+                            <strong>Topic:</strong> {device.topic}
+                          </Typography>
+                        </Stack>
+
+                        <Box sx={{ display: "flex", gap: 1 }}>
+                          <Tooltip title="Xem chi tiết">
+                            <IconButton 
+                              size="small" 
+                              color="primary"
+                              onClick={() => navigate(`/devices/${device.id}`)}
+                            >
+                              <VisibilityIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Chỉnh sửa">
+                            <IconButton 
+                              size="small" 
+                              onClick={() => startEdit(device)}
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Xóa">
+                            <IconButton 
+                              size="small" 
+                              color="error"
+                              onClick={() => handleDelete(device.id)}
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      </Box>
+                    )}
+                  </Card>
+                ))
               )}
-            </CardContent>
-          </Card>
+            </Box>
+
+            {/* Stats */}
+            {!loading && devices.length > 0 && (
+              <Box sx={{ 
+                background: "#f5f7fa", 
+                p: 2, 
+                borderRadius: 1,
+                display: "flex",
+                justifyContent: "space-around"
+              }}>
+                <Box sx={{ textAlign: "center" }}>
+                  <Typography variant="body2" color="textSecondary">Tổng thiết bị</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 700, color: "#667eea" }}>
+                    {devices.length}
+                  </Typography>
+                </Box>
+                <Box sx={{ textAlign: "center" }}>
+                  <Typography variant="body2" color="textSecondary">Hoạt động</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 700, color: "#10b981" }}>
+                    {devices.filter(d => d.is_active).length}
+                  </Typography>
+                </Box>
+                <Box sx={{ textAlign: "center" }}>
+                  <Typography variant="body2" color="textSecondary">Ngừng hoạt động</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 700, color: "#ef4444" }}>
+                    {devices.filter(d => !d.is_active).length}
+                  </Typography>
+                </Box>
+              </Box>
+            )}
+          </Stack>
         </Grid>
       </Grid>
     </Box>

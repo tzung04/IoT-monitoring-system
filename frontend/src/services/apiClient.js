@@ -6,8 +6,7 @@ const api = axios.create({
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
-  },
-  withCredentials: true
+  }
 });
 
 // Attach token if available
@@ -20,11 +19,36 @@ api.interceptors.request.use(
         config.headers.Authorization = `Bearer ${token}`;
       }
     } catch (err) {
-      // ignore (e.g., SSR or tests)
+      console.error('Error in request interceptor:', err);
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    console.error('Request error:', error);
+    return Promise.reject(error);
+  }
+);
+
+// Handle response errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response) {
+      // Server responded with error status
+      console.error('Response error:', {
+        status: error.response.status,
+        data: error.response.data,
+        message: error.response.data?.message || 'Unknown error'
+      });
+    } else if (error.request) {
+      // Request made but no response
+      console.error('No response received:', error.request);
+    } else {
+      // Error in request setup
+      console.error('Error setting up request:', error.message);
+    }
+    return Promise.reject(error);
+  }
 );
 
 export default api;

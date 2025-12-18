@@ -9,19 +9,31 @@ const useSocket = (onMessage) => {
   }, [onMessage]);
 
   useEffect(() => {
-    // Subscribe to shared WebSocket stream
-    const unsubscribe = websocketService.subscribe((payload) => {
-      if (handlerRef.current) {
-        handlerRef.current(payload);
-      }
-    });
+    if (!onMessage) return;
 
-    // Ensure connection is established immediately
-    websocketService.getSocket();
+    try {
+      // Subscribe to shared WebSocket stream
+      const unsubscribe = websocketService.subscribe((payload) => {
+        if (handlerRef.current) {
+          handlerRef.current(payload);
+        }
+      });
 
-    return () => {
-      unsubscribe();
-    };
+      // Try to establish connection (non-blocking)
+      websocketService.getSocket();
+
+      return () => {
+        try {
+          unsubscribe();
+        } catch (err) {
+          console.error("Error unsubscribing from WebSocket:", err);
+        }
+      };
+    } catch (err) {
+      console.error("Error in useSocket:", err);
+      // Don't throw - let components work without WebSocket
+      return () => {};
+    }
   }, []);
 };
 

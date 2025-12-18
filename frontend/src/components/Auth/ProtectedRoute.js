@@ -1,18 +1,41 @@
-// src/components/Auth/ProtectedRoute.js
 import React from "react";
 import { Navigate } from "react-router-dom";
-import { TOKEN_KEY } from "../../utils/constants";
+import useAuth from "../../hooks/useAuth";
 
 const ProtectedRoute = ({ children }) => {
-  // Avoid calling hooks here to prevent runtime errors if React context is
-  // unavailable; check localStorage as the single source of truth for auth
-  // persistence.
-  const token = typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
+  const { token, loading } = useAuth();
 
+  if (loading) {
+    // Show loading state while checking authentication
+    return (
+      <div style={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        height: "100vh",
+        backgroundColor: "#f5f5f5",
+      }}>
+        <div style={{
+          textAlign: "center",
+        }}>
+          <div style={{
+            fontSize: "18px",
+            color: "#666",
+            marginBottom: "16px",
+          }}>
+            Đang kiểm tra phiên đăng nhập...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // If no token, redirect to login
   if (!token) {
     return <Navigate to="/login" replace />;
   }
 
+  // Token exists, render children
   return children;
 };
 
