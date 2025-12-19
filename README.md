@@ -37,10 +37,6 @@ Use Cases:
    - Lưu trữ vào database
    - Xử lý dữ liệu realtime
 
-6. Báo cáo & Thống kê
-   - Báo cáo hàng ngày/tuần/tháng
-   - Thống kê xu hướng
-   - Phân tích dữ liệu
 3. CÔNG NGHỆ SỬ DỤNG
 3.1. Backend
 •	Node.js với Express.js
