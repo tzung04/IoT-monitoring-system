@@ -1,154 +1,141 @@
 import api from "./apiClient";
 
-const BASE = "/alerts";
+const BASE = "/alert";
 
 /**
- * Create a new alert rule for a device
- * @param {Object} payload - Alert rule data { device_id, metric_type, condition, threshold, email_to, is_enabled }
- * @returns {Promise<Object>} Created alert rule object
+ * Get all alert rules by fetching rules for each device
+ * Since backend only has GET /:deviceId, we need to fetch for all devices
+ * @param {Array} devices - Array of device objects
+ * @returns {Promise<Array>} Array of all alert rules
  */
-export const createAlert = async (payload) => {
-  if (!payload || !payload.device_id || !payload.metric_type) {
-    const error = new Error("Device ID and metric type are required");
-    console.error("createAlert error: Missing required fields", { provided: payload });
-    throw error;
-  }
-
+export const getRules = async (devices = []) => {
   try {
-    console.log("Calling POST /alerts with:", payload);
-    const resp = await api.post(BASE, payload);
-    console.log("createAlert response:", resp.data);
-
-    if (!resp.data || !resp.data.id) {
-      throw new Error("Invalid response from server: missing alert ID");
+    if (!devices || devices.length === 0) {
+      console.log("No devices provided, returning empty rules");
+      return [];
     }
 
-    return resp.data;
+    console.log(`Fetching rules for ${devices.length} devices`);
+    
+    // Fetch rules for each device in parallel
+    const promises = devices.map(device => 
+      api.get(`${BASE}/${device.id}`)
+        .then(resp => resp.data || [])
+        .catch(err => {
+          // 404 is expected when device has no rules - not an error
+          if (err.response?.status === 404) {
+            console.log(`Device ${device.id} has no rules (404)`);
+            return [];
+          }
+          // Log other errors but don't fail the whole operation
+          console.warn(`Error fetching rules for device ${device.id}:`, err.message);
+          return [];
+        })
+    );
+    
+    const results = await Promise.all(promises);
+    
+    // Flatten the array of arrays into a single array
+    const allRules = results.flat();
+    
+    console.log(`Fetched ${allRules.length} total rules from ${devices.length} devices`);
+    return allRules;
   } catch (err) {
-    const errorMsg =
-      err.response?.data?.message ||
-      err.response?.data?.error ||
-      err.message ||
-      "Failed to create alert rule";
-    console.error("createAlert error:", {
-      status: err.response?.status,
-      data: err.response?.data,
-      message: errorMsg,
-    });
-    throw new Error(errorMsg);
+    console.error("getRules error:", err);
+    return [];
   }
 };
 
 /**
- * Get all alert rules for a specific device
+ * Get alert rules for a specific device
  * @param {number} deviceId - Device ID
  * @returns {Promise<Array>} Array of alert rules
  */
-export const getAlertsByDevice = async (deviceId) => {
+export const getRulesByDevice = async (deviceId) => {
   if (!deviceId) {
-    const error = new Error("Device ID is required");
-    console.error("getAlertsByDevice error: Device ID is required");
-    throw error;
+    throw new Error("Device ID is required");
   }
 
   try {
     console.log(`Calling GET /alerts/${deviceId}`);
     const resp = await api.get(`${BASE}/${deviceId}`);
-    console.log(`getAlertsByDevice(${deviceId}) response:`, resp.data);
+    console.log(`getRulesByDevice(${deviceId}) response:`, resp.data);
     return resp.data || [];
   } catch (err) {
-    const errorMsg =
-      err.response?.data?.message ||
-      err.response?.data?.error ||
-      err.message ||
-      "Failed to fetch alert rules";
-    console.error(`getAlertsByDevice(${deviceId}) error:`, {
-      status: err.response?.status,
-      data: err.response?.data,
-      message: errorMsg,
-    });
-    throw new Error(errorMsg);
+    // 404 is expected when device has no rules
+    if (err.response?.status === 404) {
+      console.log(`Device ${deviceId} has no rules (404)`);
+      return [];
+    }
+    console.error(`getRulesByDevice(${deviceId}) error:`, err);
+    throw new Error(err.response?.data?.message || "Failed to fetch alert rules");
+  }
+};
+
+/**
+ * Create a new alert rule
+ * @param {Object} payload - { name, deviceId, type, condition, threshold, severity }
+ * @returns {Promise<Object>} Created alert rule
+ */
+export const createRule = async (payload) => {
+  try {
+    console.log("Calling POST /alerts with:", payload);
+    const resp = await api.post(BASE, payload);
+    console.log("createRule response:", resp.data);
+    return resp.data;
+  } catch (err) {
+    console.error("createRule error:", err);
+    throw new Error(err.response?.data?.message || "Failed to create alert rule");
   }
 };
 
 /**
  * Update an alert rule
- * @param {number} ruleId - Alert rule ID
- * @param {Object} payload - Update data { metric_type, condition, threshold, email_to, is_enabled }
- * @returns {Promise<Object>} Updated alert rule object
+ * @param {number} ruleId - Rule ID
+ * @param {Object} payload - Update data
+ * @returns {Promise<Object>} Updated alert rule
  */
-export const updateAlert = async (ruleId, payload) => {
+export const updateRule = async (ruleId, payload) => {
   if (!ruleId) {
-    const error = new Error("Alert rule ID is required");
-    console.error("updateAlert error: Alert rule ID is required");
-    throw error;
+    throw new Error("Rule ID is required");
   }
 
   try {
     console.log(`Calling PUT /alerts/${ruleId} with:`, payload);
     const resp = await api.put(`${BASE}/${ruleId}`, payload);
-    console.log(`updateAlert(${ruleId}) response:`, resp.data);
-
-    if (!resp.data || !resp.data.id) {
-      throw new Error("Invalid response from server: missing alert data");
-    }
-
+    console.log(`updateRule(${ruleId}) response:`, resp.data);
     return resp.data;
   } catch (err) {
-    const errorMsg =
-      err.response?.data?.message ||
-      err.response?.data?.error ||
-      err.message ||
-      "Failed to update alert rule";
-    console.error(`updateAlert(${ruleId}) error:`, {
-      status: err.response?.status,
-      data: err.response?.data,
-      message: errorMsg,
-    });
-    throw new Error(errorMsg);
+    console.error(`updateRule(${ruleId}) error:`, err);
+    throw new Error(err.response?.data?.message || "Failed to update alert rule");
   }
 };
 
 /**
  * Delete an alert rule
- * @param {number} ruleId - Alert rule ID
+ * @param {number} ruleId - Rule ID
  * @returns {Promise<Object>} Response with message
  */
-export const deleteAlert = async (ruleId) => {
+export const deleteRule = async (ruleId) => {
   if (!ruleId) {
-    const error = new Error("Alert rule ID is required");
-    console.error("deleteAlert error: Alert rule ID is required");
-    throw error;
+    throw new Error("Rule ID is required");
   }
 
   try {
     console.log(`Calling DELETE /alerts/${ruleId}`);
     const resp = await api.delete(`${BASE}/${ruleId}`);
-    console.log(`deleteAlert(${ruleId}) response:`, resp.data);
-
-    if (!resp.data || !resp.data.message) {
-      throw new Error("Invalid response from server: missing message");
-    }
-
+    console.log(`deleteRule(${ruleId}) response:`, resp.data);
     return resp.data;
   } catch (err) {
-    const errorMsg =
-      err.response?.data?.message ||
-      err.response?.data?.error ||
-      err.message ||
-      "Failed to delete alert rule";
-    console.error(`deleteAlert(${ruleId}) error:`, {
-      status: err.response?.status,
-      data: err.response?.data,
-      message: errorMsg,
-    });
-    throw new Error(errorMsg);
+    console.error(`deleteRule(${ruleId}) error:`, err);
+    throw new Error(err.response?.data?.message || "Failed to delete alert rule");
   }
 };
 
 export default {
-  createAlert,
-  getAlertsByDevice,
-  updateAlert,
-  deleteAlert,
+  getRules,
+  getRulesByDevice,
+  createRule,
+  updateRule,
+  deleteRule,
 };
