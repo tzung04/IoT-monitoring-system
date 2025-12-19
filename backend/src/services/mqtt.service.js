@@ -1,8 +1,8 @@
 import { getMQTTClient } from '../config/mqtt.js';
 import Device from '../models/device.model.js';
 import { writeSensorData } from '../config/influxdb.js';
-import AlertRule from '../models/alertRule.model.js'; // Model AlertRule
-import AlertLog from '../models/alertLog.model.js';   // Model AlertLog
+import AlertRule from '../models/alertRule.model.js'; 
+import AlertLog from '../models/alertLog.model.js';   
 import emailService from '../services/email.service.js'
 
 const TOPIC_PROVISION_REQ = 'system/provisioning/req';
