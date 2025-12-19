@@ -31,9 +31,7 @@ const DeviceManagementPage = () => {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ 
     name: "", 
-    mac_address: "", 
-    place_id: "",
-    description: ""
+    mac_address: ""
   });
   const [formErrors, setFormErrors] = useState({});
   const [error, setError] = useState("");
@@ -41,6 +39,7 @@ const DeviceManagementPage = () => {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ 
     name: "", 
+    place_id: "",
     description: "",
     is_active: false 
   });
@@ -132,8 +131,7 @@ const DeviceManagementPage = () => {
     try {
       const created = await deviceService.createDevice({
         name: form.name,
-        mac_address: form.mac_address.toUpperCase(),
-        place_id: form.place_id || null
+        mac_address: form.mac_address.toUpperCase()
       });
       
       if (created && created.id) {
@@ -145,7 +143,7 @@ const DeviceManagementPage = () => {
           severity: "success" 
         });
       }
-      setForm({ name: "", mac_address: "", place_id: "", description: "" });
+      setForm({ name: "", mac_address: "" });
       setFormErrors({});
     } catch (err) {
       console.error("Add device error:", err);
@@ -178,15 +176,15 @@ const DeviceManagementPage = () => {
     setEditingId(device.id);
     setEditForm({
       name: device.name,
-      description: device.description || "",
+      place_id: device.place_id || "",
       is_active: device.is_active || false,
+      topic: device.topic || "",
     });
     trackEvent("device_edit_start", { id: device.id });
   };
-
   const cancelEdit = () => {
     setEditingId(null);
-    setEditForm({ name: "", description: "", is_active: false });
+    setEditForm({ name: "", place_id: "", is_active: false, topic: "" });
   };
 
   const saveEdit = async (id) => {
@@ -196,7 +194,17 @@ const DeviceManagementPage = () => {
     }
 
     try {
-      const updated = await deviceService.updateDevice(id, editForm);
+      // Build minimal payload - only update name
+      const payload = {
+        name: editForm.name.trim(),
+      };
+      
+      // Don't send place_id unless we're certain it's valid
+      // To avoid foreign key constraint violations with non-existent places
+      // If you need to update place_id, create a separate UI flow for it
+      
+      console.log("Payload being sent for update:", payload);
+      const updated = await deviceService.updateDevice(id, payload);
       setDevices((prev) => prev.map((d) => (d.id === id ? updated : d)));
       cancelEdit();
       trackEvent("device_updated", { id });
@@ -266,29 +274,6 @@ const DeviceManagementPage = () => {
                   placeholder="AA:BB:CC:DD:EE:FF"
                   error={!!formErrors.mac_address}
                   helperText={formErrors.mac_address}
-                />
-
-                <TextField
-                  label="Vị trí (tuỳ chọn)"
-                  name="place_id"
-                  value={form.place_id}
-                  onChange={handleChange}
-                  size="small"
-                  fullWidth
-                  placeholder="VD: 1 (ID vị trí)"
-                  type="number"
-                />
-
-                <TextField
-                  label="Mô tả (tuỳ chọn)"
-                  name="description"
-                  value={form.description}
-                  onChange={handleChange}
-                  size="small"
-                  fullWidth
-                  multiline
-                  rows={2}
-                  placeholder="Ghi chú về thiết bị"
                 />
 
                 <Button 
@@ -366,13 +351,13 @@ const DeviceManagementPage = () => {
                           fullWidth
                         />
                         <TextField
-                          label="Mô tả"
-                          value={editForm.description}
-                          onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                          label="Vị trí (tuỳ chọn)"
+                          value={editForm.place_id}
+                          onChange={(e) => setEditForm({ ...editForm, place_id: e.target.value })}
                           size="small"
                           fullWidth
-                          multiline
-                          rows={2}
+                          placeholder="VD: 1"
+                          type="number"
                         />
                         <Box sx={{ display: "flex", gap: 1 }}>
                           <Button 

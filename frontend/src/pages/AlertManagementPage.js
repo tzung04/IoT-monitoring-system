@@ -23,6 +23,7 @@ import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 import useSocket from "../hooks/useSocket";
 import alertService from "../services/alert.service";
+import sensorService from "../services/sensor.service";
 import deviceService from "../services/device.service";
 import { trackEvent } from "../observability/faro";
 
@@ -82,7 +83,7 @@ const AlertManagementPage = () => {
         setLoadingNotification(true);
         const [alertList, history, ruleList, deviceList, notifConfig] = await Promise.all([
           alertService.getAlerts(),
-          alertService.getAlertHistory(),
+          sensorService.getAlertHistory(),
           alertService.getRules(),
           deviceService.getDevices(),
           alertService.getNotificationConfig(),

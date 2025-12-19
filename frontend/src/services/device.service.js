@@ -113,11 +113,18 @@ export const updateDevice = async (id, payload) => {
 
     return resp.data;
   } catch (err) {
+    console.error(`updateDevice(${id}) - Full error object:`, err);
+    console.error(`updateDevice(${id}) - Response:`, err.response);
+    console.error(`updateDevice(${id}) - Response data:`, err.response?.data);
+    
     const errorMsg =
+      err.response?.data?.details ||
       err.response?.data?.error ||
       err.response?.data?.message ||
       err.message ||
       "Failed to update device";
+    
+    console.error(`updateDevice(${id}) - Final error message:`, errorMsg);
     console.error(`updateDevice(${id}) error:`, {
       status: err.response?.status,
       data: err.response?.data,

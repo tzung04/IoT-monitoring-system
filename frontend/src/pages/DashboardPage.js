@@ -24,6 +24,7 @@ import OnlinePredictionIcon from "@mui/icons-material/OnlinePrediction";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import deviceService from "../services/device.service";
 import alertService from "../services/alert.service";
+import sensorService from "../services/sensor.service";
 import dashboardLayoutService from "../services/dashboardLayout.service";
 import useSocket from "../hooks/useSocket";
 import HistoricalChart from "../components/Charts/HistoricalChart";
@@ -70,7 +71,7 @@ const DashboardPage = () => {
       setLoading(true);
       const [deviceList, alertHistory, savedLayout] = await Promise.all([
         deviceService.getDevices(),
-        alertService.getAlertHistory(),
+        sensorService.getAlertHistory(),
         dashboardLayoutService.getLayout(),
       ]);
       setDevices(Array.isArray(deviceList) ? deviceList : []);

@@ -27,5 +27,3 @@ pool.on('error', (err) => {
 });
 
 export default pool;
-
-await pool.query('select 1');
