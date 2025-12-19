@@ -77,7 +77,7 @@ CREATE DATABASE iot_monitoring;
 
 **Chạy migration để tạo tables:**
 ```bash
-node src/config/database.js
+node src/database/setup.js
 ```
 
 ### Bước 5.1: Setup InfluxDB
@@ -103,7 +103,6 @@ node src/config/database.js
 
     HTTP:
       URL: http://influxdb:8086
-      (Chú ý: dùng tên service trong docker, không phải localhost)
 
     InfluxDB Details(xem ở bước 5.1):
       Organization: 
@@ -245,6 +244,51 @@ nhớ tạo 1 user có 1 device xác định topic, bắn dữ liệu vô topic 
  có thể dùng dashboardRoutes để lấy url
 http://localhost:3001/d/abc123xyz/iot-monitoring?orgId=1&var-user_id=1&theme=light&from=now-15m&to=now&timezone=browser&refresh=5s
 
+### Huong dan tao va kich hoat thiet bi
+#### 1. Them thiet bi logic
+```bash
+POST /api/devices/
+Content-Type: application/json
+
+{
+  "name": "Cam bien kho 1",
+  "mac_address": "AABBCCDDEEFF" (dia chi mac lay in tren thiet bi, nguoi dung tu nhap vao)
+}
+```
+**response**
+```json
+{
+    "id": 1,
+    "user_id": 1,
+    "place_id": null,
+    "mac_address": "AABBCCDDEEFF",
+    "device_serial": "E248D27E014AAAC6",
+    "name": "Cam bien kho 1",
+    "topic": "/devices/AABBCCDDEEFF/E248D27E014AAAC6/data",
+    "is_active": false,
+    "created_at": "2025-12-16T01:23:10.933Z"
+}
+```
+#### 2. Ket noi voi thiet bi vat ly
+Đến bước này sẽ do esp32 làm việc với server
+Cụ thể như sau:
+- Cấp nguồn cho esp32
+- esp32 kết nối wifi, kết nối mqtt broker sau đó subscribe topic system/provisioning/${mac}/res để chờ phản hồi từ server
+- esp32 gửi message {"mac": "AABBCCDDEEFF"} đến topic: system/provisioning/req
+- server active device logic, gửi topic nhận data đã tạo về cho esp32 qua topic system/provisioning/${mac}/res
+- esp32 nhận được res thì bắt đầu publish data vào topic server gửi về (/devices/AABBCCDDEEFF/E248D27E014AAAC6/data)
+
+thế là xong!
+
+[Nếu không có esp32 bạn dùng mqtt client tuỳ ý giả làm esp32 mà làm nhé]
+vi du: 
+1. send req: 
+ mosquitto_pub -h localhost -p 1884 -t system/provisioning/req -m '{"mac": "AABBCCDDEEFF"}'
+2. recv res: 
+ mosquitto_sub -h localhost -p 1884 -t system/provisioning/AABBCCDDEEFF/res
+{"status":"success","topic":"/devices/AABBCCDDEEFF/E248D27E014AAAC6/data"} (dong nay xuat hien khi ong vua publish o phia tren!)
+
+
 
 ### Bước 6: Khởi động Server
 
@@ -366,10 +410,15 @@ Content-Type: application/json
 
 ### 1. Thêm device vào database
 
-```sql
--- Chạy trong PostgreSQL
-INSERT INTO devices (user_id, device_serial, name, topic, is_active)
-VALUES (1, 'ABCDABCDABCD', 'Cảm biến kho 1', '/devices/ABCDABCDABCD/data', true);
+```bash
+POST /api/devices
+Content-Type: application/json
+
+{
+  "mac_address": "AABBCCDDEEFF",
+  "name": "Cam bien kho 1",
+  "place_id": "1" (co roi thi them khong thi thoi nhe)
+}
 ```
 
 ### 2. Publish test data qua MQTT
@@ -384,8 +433,9 @@ brew install mosquitto
 ```
 
 **Gửi dữ liệu sensor:**
+topic ban vao database xem nhe
 ```bash
-mosquitto_pub -h localhost -t "/devices/ABCDABCDABCD/data" \
+mosquitto_pub -h localhost -t "/devices/AABBCCDDEEFF/{serial}/data" \
   -m '{"temperature": 25.5, "humidity": 60.3}'
 ```
 
@@ -393,7 +443,7 @@ mosquitto_pub -h localhost -t "/devices/ABCDABCDABCD/data" \
 
 **Trong terminal server:**
 ```
-Message from /devices/ABCDABCDABCD: { temperature: 25.5, humidity: 60.3 }
+Message from /devices/AABBCCDDEEFF: { temperature: 25.5, humidity: 60.3 }
 ✓ Data saved to InfluxDB for device: Cảm biến kho 1
 ```
 
@@ -420,7 +470,7 @@ Message from /devices/ABCDABCDABCD: { temperature: 25.5, humidity: 60.3 }
 
 **devices**
 - id, user_id, place_id
-- device_serial, name, topic
+- mac_address, device_serial, name, topic
 - is_active, created_at
 
 **alert_rules**
@@ -456,7 +506,7 @@ Message from /devices/ABCDABCDABCD: { temperature: 25.5, humidity: 60.3 }
 2. **Backend** nhận message → Parse JSON
 3. Tìm **device** trong PostgreSQL theo topic
 4. Lưu data vào **InfluxDB** (time series)
-5. *(TODO)* Kiểm tra **Alert Rules** → Gửi email nếu vượt ngưỡng
+5. Kiểm tra **Alert Rules** → Gửi email nếu vượt ngưỡng
 
 ---
 

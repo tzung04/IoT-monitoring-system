@@ -3,7 +3,9 @@ import Device from '../models/device.model.js';
 import { writeSensorData } from '../config/influxdb.js';
 import AlertRule from '../models/alertRule.model.js'; // Model AlertRule
 import AlertLog from '../models/alertLog.model.js';   // Model AlertLog
-import emailService from './email.service.js';
+import emailService from '../services/email.service.js'
+
+const TOPIC_PROVISION_REQ = 'system/provisioning/req';
 
 class MQTTService {
   constructor() {
@@ -11,85 +13,88 @@ class MQTTService {
   }
 
 
-  checkCondition(value, operator, threshold) {
-    switch (operator) {
-      case '>': return value > threshold;
-      case '<': return value < threshold;
-      case '=': return value === threshold;
-      case '>=': return value >= threshold;
-      case '<=': return value <= threshold;
+  checkCondition(value, condition, threshold) {
+    switch (condition) {
+      case 'greater_than': return value > threshold;
+      case 'less_than': return value < threshold;
+      case 'equal': return value === threshold;
+      case 'not_equal': return value !== threshold;
+      case 'greater_than_or_equal': return value >= threshold;
+      case 'less_than_or_equal': return value <= threshold;
       default: return false;
     }
   }
 
   async checkAlertRules(device, payload) {
-    // Lấy tất cả rule đang kích hoạt cho thiết bị
-    const rules = await AlertRule.findEnabledByDeviceId(device.id);
+    try {
+      const conditionMap = {
+            'greater_than': '>',
+            'less_than': '<',
+            'equal': '=',
+            'not_equal': '!=',
+            'greater_than_or_equal': '>=',
+            'less_than_or_equal': '<=',
+        };
+      
+      const rules = await AlertRule.findEnabledByDeviceId(device.id);
 
-    for (const rule of rules) {
-      let sensorValue;
-      const metricName = rule.metric_type.toLowerCase();
+      for (const rule of rules) {
+        let sensorValue;
+        let metricName = rule.metric_type.toLowerCase();
+        
+        const conditionSymbol = conditionMap[rule.condition] || rule.condition;
 
-      // 1. Lấy giá trị sensor từ payload
-      if (metricName === 'temperature') {
-        sensorValue = payload.temperature;
-      } else if (metricName === 'humidity') {
-        sensorValue = payload.humidity;
+        if (metricName === 'temperature') sensorValue = payload.temperature;
+        else if (metricName === 'humidity') sensorValue = payload.humidity;
+
+        if (sensorValue === undefined || sensorValue === null) continue;
+
+        // 1. Kiểm tra ngưỡng
+        const isViolated = this.checkCondition(sensorValue, rule.condition, rule.threshold);
+
+        if (isViolated) {
+          // 2. Debounce (5 phút)
+          const recentAlert = await AlertLog.findRecentByDeviceAndRule(device.id, rule.id, 5);
+          if (recentAlert) {
+            console.log(`[DEBOUNCE] Alert for ${device.name} skipped.`);
+            continue;
+          }
+
+          // 3. Tạo Log
+          const message = `[CẢNH BÁO ${rule.metric_type.toUpperCase()}] ${device.name}: ${sensorValue} ${rule.condition} ${rule.threshold}`;
+          
+          await AlertLog.create({
+            device_id: device.id,
+            rule_id: rule.id,
+            value_at_time: sensorValue,
+            message: message,
+          });
+
+          console.log(`\nALERT TRIGGERED: ${message}`);
+
+          const ruleDisplay = `
+          ${rule.metric_type} ${conditionSymbol} ${rule.threshold}
+          (Giá trị vượt ngưỡng: ${sensorValue})
+          `;
+          // 4. Gửi Email
+          try {
+            const emailSent = await emailService.sendAlertEmail(rule.email_to, device.name, ruleDisplay);
+            if (!emailSent) console.warn(`[MAIL FAIL] Could not send alert email to ${rule.email_to}`);
+          } catch (mailErr) {
+            console.error(`[MAIL ERROR] ${mailErr.message}`);
+          }
+        }
       }
-
-      // Nếu payload không có metric này → bỏ qua
-      if (sensorValue === undefined || sensorValue === null) {
-        continue;
-      }
-
-      // 2. Kiểm tra điều kiện cảnh báo
-      const isViolated = this.checkCondition(
-        sensorValue,
-        rule.condition,
-        rule.threshold
-      );
-
-      if (!isViolated) continue;
-
-      // 3. Chống spam (debounce 5 phút)
-      const recentAlert = await AlertLog.findRecentByDeviceAndRule(
-        device.id,
-        rule.id,
-        5
-      );
-
-      if (recentAlert) {
-        console.log(`[DEBOUNCE] Alert for ${device.name} skipped.`);
-        continue;
-      }
-
-      // 4. Tạo log cảnh báo
-      const message = `[CẢNH BÁO ${rule.metric_type.toUpperCase()}] ${device.name
-        }: ${sensorValue} ${rule.condition} ${rule.threshold}`;
-
-      await AlertLog.create({
-        device_id: device.id,
-        rule_id: rule.id,
-        value_at_time: sensorValue,
-        message: message,
-      });
-
-      console.log(`\n ALERT TRIGGERED: ${message}`);
-
-      // 5. GỬI EMAIL CẢNH BÁO
-      if (device.user?.email) {
-        await emailService.sendAlertEmail(
-          device.user.email,
-          device.name,
-          `${rule.metric_type} ${rule.condition} ${rule.threshold} (Giá trị hiện tại: ${sensorValue})`
-        );
-      }
+    } catch (err) {
+      console.error("[ALERT ERROR] Check rules failed:", err);
     }
   }
 
   // Subscribe tất cả devices đang active
   async subscribeAllDevices() {
     try {
+
+      this.subscribeTopic(TOPIC_PROVISION_REQ);
 
       const devices = await Device.findActiveDevices();
 
@@ -155,51 +160,89 @@ class MQTTService {
   // Xử lý message nhận được
   async handleMessage(topic, message) {
     try {
-      const payload = JSON.parse(message.toString());
-
-      const parts = topic.split('/');
-      if (parts.length >= 3) {
-        const fromDevice = `${parts[1]}/${parts[2]}`;
-        console.log(`Message from ${fromDevice}`);
-      } else {
-        // In ra cả topic nếu sai định dạng
-        console.log(`Message from ${topic}`);
-      }
-
-      // Tìm device theo topic
-      const device = await Device.findByTopic(topic);
-
-      if (!device) {
-        console.warn(`Device not found for topic: ${topic}`);
+      // 1. Xử lý yêu cầu Provisioning (Kích hoạt thiết bị)
+      if (topic === TOPIC_PROVISION_REQ) {
+        await this.handleProvisioning(message);
         return;
       }
 
-      if (!device.is_active) {
-        console.warn(`Device ${device.name} is not active`);
-        return;
-      }
-
-      // Validate payload
-      if (!this.isValidPayload(payload)) {
-        console.warn('Invalid payload format:', payload);
-        return;
-      }
-
-      // Lưu vào InfluxDB
-      const saved = await writeSensorData(device.device_serial, device.user_id, payload);
-
-      if (saved) {
-        console.log(`✓ Data saved to InfluxDB for device: ${device.name}`);
-      } else {
-        console.error(`Failed to save data for device: ${device.name}`);
-      }
-
-      //Kiểm tra cảnh báo
-      await this.checkAlertRules(device, payload);
+      // 2. Xử lý dữ liệu cảm biến thông thường
+      await this.handleSensorData(topic, message);
 
     } catch (err) {
       console.error(`Error handling message from ${topic}:`, err);
     }
+  }
+
+  // --- Provisioning ---
+  async handleProvisioning(message) {
+    try {
+      const payload = JSON.parse(message.toString());
+      const { mac } = payload; 
+
+      if (!mac) return; 
+
+      console.log(`[PROVISION] Request from mac_address: ${mac}`);
+
+      const device = await Device.findByMac(mac); 
+      const replyTopic = `system/provisioning/${mac}/res`;
+      const client = getMQTTClient();
+
+      if (device) {
+        
+        if (!device.is_active) {
+            console.log(`[PROVISION] Activating new device: ${device.name}...`);
+            
+            await Device.update(device.id, { is_active: true });
+            
+            device.is_active = true; 
+        }
+
+        const response = { status: "success", topic: device.topic };
+        
+        client.publish(replyTopic, JSON.stringify(response), { qos: 1 });
+        console.log(`[PROVISION] ✓ Approved ${device.name}. Sent topic: ${device.topic}`);
+        
+        this.subscribeTopic(device.topic); 
+
+      } else {
+        const response = { status: "error", message: "Device not registered" };
+        client.publish(replyTopic, JSON.stringify(response), { qos: 1 });
+        console.warn(`[PROVISION] ✗ Denied mac_address: ${mac}`);
+      }
+    } catch (e) {
+      console.error("[PROVISION ERROR]", e);
+    }
+  }
+
+  // --- Xử lý Data Cảm biến ---
+  async handleSensorData(topic, message) {
+    const payload = JSON.parse(message.toString());
+
+    console.log(`[DATA] ${topic} -> T:${payload.temperature} H:${payload.humidity}`);
+
+    // Tìm device theo topic
+    const device = await Device.findByTopic(topic);
+
+    if (!device) {
+      console.warn(`[WARN] Unknown topic: ${topic}`);
+      this.unsubscribeTopic(topic); 
+      return;
+    }
+
+    if (!device.is_active) return;
+
+    if (!this.isValidPayload(payload)) {
+      console.warn('[WARN] Invalid payload format');
+      return;
+    }
+
+    // Lưu InfluxDB
+    const saved = await writeSensorData(device.device_serial, device.user_id, payload);
+    if (!saved) console.error(`[INFLUX] Failed to save data for ${device.name}`);
+
+    // Kiểm tra cảnh báo
+    await this.checkAlertRules(device, payload);
   }
 
   // Validate payload
