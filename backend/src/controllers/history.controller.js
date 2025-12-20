@@ -13,20 +13,19 @@ export const getSensorDataHistory = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        // 1. Bảo mật: Xác thực quyền sở hữu thiết bị
+        // Bảo mật: Xác thực quyền sở hữu thiết bị
         // Lấy device theo key và kiểm tra user_id
         const device = await Device.findByTopic(deviceKey);
         if (!device || device.user_id.toString() !== userId.toString()) {
             return res.status(403).json({ message: 'Thiết bị không tồn tại hoặc bạn không có quyền truy cập.' });
         }
 
-        // Chuyển timeRange thành số giờ (vì hàm querySensorData mới nhận hours)
         let hours = 24;
         if (timeRange.endsWith('h')) {
             hours = parseInt(timeRange.slice(1, -1));
         }
 
-        const results = await querySensorData(device.device_serial, hours);
+        const results = await querySensorData(device.device_serial, userId, hours);
 
         res.json(results);
     } catch (error) {

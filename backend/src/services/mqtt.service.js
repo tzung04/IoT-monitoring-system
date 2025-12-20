@@ -238,7 +238,7 @@ class MQTTService {
     }
 
     // Lưu InfluxDB
-    const saved = await writeSensorData(device.device_serial, device.user_id, payload);
+    const saved = await writeSensorData(device.name, device.user_id, payload);
     if (!saved) console.error(`[INFLUX] Failed to save data for ${device.name}`);
 
     // Kiểm tra cảnh báo

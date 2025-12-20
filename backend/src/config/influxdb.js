@@ -17,13 +17,12 @@ export const writeApi = influxDB.getWriteApi(
 export const queryApi = influxDB.getQueryApi(process.env.INFLUX_ORG);
 
 // Write sensor data
-export const writeSensorData = async (deviceSerial, userId, measurements) => {
+export const writeSensorData = async ( deviceName, userId, measurements) => {
   try {
     const point = new Point('sensor_data')
-      .tag('device', deviceSerial)
-      .tag('user_id', userId.toString());
+      .tag('device_name', deviceName) 
+      .tag('user_id', userId);
 
-    // Add fields dynamically
     if (measurements.temperature !== undefined) {
       point.floatField('temperature', measurements.temperature);
     }
@@ -34,7 +33,7 @@ export const writeSensorData = async (deviceSerial, userId, measurements) => {
     point.timestamp(new Date());
 
     writeApi.writePoint(point);
-    await writeApi.flush();
+    await writeApi.flush(); 
     
     return true;
   } catch (err) {
@@ -44,13 +43,13 @@ export const writeSensorData = async (deviceSerial, userId, measurements) => {
 };
 
 // Query sensor data
-export const querySensorData = async (deviceSerial, hours = 24) => {
+export const querySensorData = async (device_name, userId, hours = 24) => {
   const query = `
     from(bucket: "${process.env.INFLUX_BUCKET}")
       |> range(start: -${hours}h)
       |> filter(fn: (r) => r._measurement == "sensor_data")
       |> filter(fn: (r) => r.user_id == "${userId}")
-      |> filter(fn: (r) => r.device == "${deviceSerial}")
+      |> filter(fn: (r) => r.device_name == "${device_name}")
       |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
   `;
 
