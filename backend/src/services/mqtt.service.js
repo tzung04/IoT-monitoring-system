@@ -61,7 +61,7 @@ class MQTTService {
           }
 
           // 3. Tạo Log
-          const message = `[CẢNH BÁO ${rule.metric_type.toUpperCase()}] ${device.name}: ${sensorValue} ${rule.condition} ${rule.threshold}`;
+          const message = `[CẢNH BÁO ${rule.metric_type.toUpperCase()}] ${device.name}: ${sensorValue} ${conditionSymbol} ${rule.threshold}`;
           
           await AlertLog.create({
             device_id: device.id,
