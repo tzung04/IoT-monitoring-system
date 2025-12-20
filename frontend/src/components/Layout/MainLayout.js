@@ -1,14 +1,36 @@
-import React from "react";
+import React, { useState } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
-import { Box, AppBar, Toolbar, Typography, Button } from "@mui/material";
+import { Box, AppBar, Toolbar, Typography, Button, Menu, MenuItem } from "@mui/material";
+import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import useAuth from "../../hooks/useAuth";
+import authService from "../../services/auth.service";
 import Sidebar from "./Sidebar";
 
 const MainLayout = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [anchorEl, setAnchorEl] = useState(null);
 
-  const handleLogout = () => {
+  const handleMenuOpen = (e) => {
+    setAnchorEl(e.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleChangePassword = () => {
+    navigate("/change-password");
+    handleMenuClose();
+  };
+
+  const handleLogout = async () => {
+    handleMenuClose();
+    try {
+      await authService.logout();
+    } catch (err) {
+      console.error("Logout API error", err);
+    }
     logout();
     navigate("/login");
   };
@@ -24,11 +46,31 @@ const MainLayout = () => {
         <AppBar position="static" color="primary" sx={{ zIndex: 1 }}>
           <Toolbar sx={{ justifyContent: "space-between" }}>
             <Typography variant="h6">IoT Monitoring System</Typography>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <Typography variant="body1">{user?.username || "Guest"}</Typography>
-              <Button color="inherit" onClick={handleLogout}>
-                Logout
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Button
+                color="inherit"
+                startIcon={<AccountCircleIcon />}
+                onClick={handleMenuOpen}
+              >
+                {user?.username || "Guest"}
               </Button>
+              <Menu
+                anchorEl={anchorEl}
+                open={Boolean(anchorEl)}
+                onClose={handleMenuClose}
+                anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                transformOrigin={{ vertical: "top", horizontal: "right" }}
+              >
+                <MenuItem disabled>
+                  {user?.email && `${user.email}`}
+                </MenuItem>
+                <MenuItem onClick={handleChangePassword}>
+                  Đổi mật khẩu
+                </MenuItem>
+                <MenuItem onClick={handleLogout}>
+                  Đăng xuất
+                </MenuItem>
+              </Menu>
             </Box>
           </Toolbar>
         </AppBar>
