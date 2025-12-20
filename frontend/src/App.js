@@ -10,6 +10,8 @@ import DashboardPage from "./pages/DashboardPage";
 import DeviceManagementPage from "./pages/DeviceManagementPage";
 import DeviceDetailPage from "./pages/DeviceDetailPage";
 import AlertManagementPage from "./pages/AlertManagementPage";
+import AlertHistoryPage from "./pages/AlertHistoryPage";
+import DataExplorerPage from "./pages/DataExplorerPage";
 import ReportPage from "./pages/ReportPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import ProtectedRoute from "./components/Auth/ProtectedRoute";
@@ -51,6 +53,8 @@ function App() {
           <Route path="devices" element={<DeviceManagementPage />} />
           <Route path="devices/:id" element={<DeviceDetailPage />} />
           <Route path="alerts" element={<AlertManagementPage />} />
+          <Route path="alert-history" element={<AlertHistoryPage />} />
+          <Route path="data-explorer" element={<DataExplorerPage />} />
           <Route path="reports" element={<ReportPage />} />
         </Route>
 

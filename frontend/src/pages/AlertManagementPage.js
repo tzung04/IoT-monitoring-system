@@ -26,6 +26,7 @@ import useSocket from "../hooks/useSocket";
 import useAuth from "../hooks/useAuth";
 import alertService from "../services/alert.service";
 import deviceService from "../services/device.service";
+import sensorService from "../services/sensor.service";
 import { trackEvent } from "../observability/faro";
 
 const MAX_ALERTS = 50;
@@ -49,6 +50,7 @@ const CONDITION_REVERSE_MAP = {
 const AlertManagementPage = () => {
   const { user } = useAuth();
   const [alerts, setAlerts] = useState([]);
+  const [alertsLoading, setAlertsLoading] = useState(false);
   const [rules, setRules] = useState([]);
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -98,6 +100,28 @@ const AlertManagementPage = () => {
         }));
         
         setRules(transformedRules);
+        
+        // Load recent alert history from backend
+        setAlertsLoading(true);
+        try {
+          const alertHistory = await sensorService.getAlertHistory();
+          // Transform alert history to frontend format
+          const transformedAlerts = (alertHistory || [])
+            .sort((a, b) => new Date(b.triggered_at || b.timestamp) - new Date(a.triggered_at || a.timestamp))
+            .slice(0, MAX_ALERTS)
+            .map(alert => ({
+              ...alert,
+              id: alert.id || alert.alert_rule_id,
+              deviceId: alert.device_id,
+              timestamp: alert.triggered_at || alert.timestamp,
+            }));
+          setAlerts(transformedAlerts);
+        } catch (err) {
+          console.warn("Failed to load alert history:", err);
+          // Don't fail the page load if we can't get history
+        } finally {
+          setAlertsLoading(false);
+        }
         
       } catch (err) {
         console.error("Load alerts page error", err);
@@ -587,9 +611,13 @@ const AlertManagementPage = () => {
               <Card>
                 <CardContent>
                   <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-                    🔔 Cảnh báo gần đây
+                    🔔 Cảnh báo gần đây ({latestAlerts.length})
                   </Typography>
-                  {latestAlerts.length === 0 ? (
+                  {alertsLoading ? (
+                    <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+                      <CircularProgress />
+                    </Box>
+                  ) : latestAlerts.length === 0 ? (
                     <Box sx={{ textAlign: "center", py: 4 }}>
                       <Typography color="text.secondary">
                         Chưa có cảnh báo nào.
@@ -597,30 +625,35 @@ const AlertManagementPage = () => {
                     </Box>
                   ) : (
                     <Stack spacing={1}>
-                      {latestAlerts.map((a) => (
-                        <Card key={a.id} variant="outlined">
-                          <CardContent sx={{ py: 1.5 }}>
-                            <Stack direction="row" justifyContent="space-between" alignItems="center">
-                              <Box flex={1}>
-                                <Typography fontWeight={600}>
-                                  {a.message || `${a.type} alert`}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                  Device #{a.deviceId} • {a.type} = {a.value}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  {a.timestamp ? new Date(a.timestamp).toLocaleString() : ""}
-                                </Typography>
-                              </Box>
-                              <Chip
-                                label={a.severity}
-                                color={a.severity === "high" ? "error" : a.severity === "medium" ? "warning" : "default"}
-                                size="small"
-                              />
-                            </Stack>
-                          </CardContent>
-                        </Card>
-                      ))}
+                      {latestAlerts.map((a) => {
+                        const device = devices.find(d => d.id === a.deviceId);
+                        return (
+                          <Card key={a.id} variant="outlined">
+                            <CardContent sx={{ py: 1.5 }}>
+                              <Stack direction="row" justifyContent="space-between" alignItems="start" gap={1}>
+                                <Box flex={1}>
+                                  <Typography fontWeight={600}>
+                                    {a.message || `${a.type || 'Alert'}`}
+                                  </Typography>
+                                  <Typography variant="body2" color="text.secondary">
+                                    {device ? device.name : `Device #${a.deviceId}`} • {a.type || 'Unknown'} {a.value ? `= ${a.value}` : ''}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {a.timestamp ? new Date(a.timestamp).toLocaleString('vi-VN') : ""}
+                                  </Typography>
+                                </Box>
+                                {a.severity && (
+                                  <Chip
+                                    label={a.severity}
+                                    color={a.severity === "high" ? "error" : a.severity === "medium" ? "warning" : "default"}
+                                    size="small"
+                                  />
+                                )}
+                              </Stack>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
                     </Stack>
                   )}
                 </CardContent>

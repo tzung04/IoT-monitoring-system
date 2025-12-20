@@ -22,13 +22,17 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
+import { CircularProgress } from "@mui/material";
 import deviceService from "../services/device.service";
+import sensorService from "../services/sensor.service";
 import useSocket from "../hooks/useSocket";
 import { trackEvent } from "../observability/faro";
 
 const DeviceManagementPage = () => {
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [latestData, setLatestData] = useState({});
+  const [loadingLatest, setLoadingLatest] = useState({});
   const [form, setForm] = useState({ 
     name: "", 
     mac_address: ""
@@ -56,6 +60,34 @@ const DeviceManagementPage = () => {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    const loadLatestData = async () => {
+      if (devices.length === 0) return;
+      const newLatestData = { ...latestData };
+      for (const device of devices) {
+        if (newLatestData[device.id]) continue;
+        setLoadingLatest((prev) => ({ ...prev, [device.id]: true }));
+        try {
+          const data = await sensorService.getLatestData(device.id);
+          if (data && data.latest_data) {
+            newLatestData[device.id] = {
+              temperature: data.latest_data.temperature,
+              humidity: data.latest_data.humidity,
+              timestamp: data.latest_data.timestamp,
+            };
+          }
+        } catch (err) {
+          console.warn(`Failed to load latest data for device ${device.id}:`, err);
+          newLatestData[device.id] = null;
+        } finally {
+          setLoadingLatest((prev) => ({ ...prev, [device.id]: false }));
+        }
+      }
+      setLatestData(newLatestData);
+    };
+    loadLatestData();
+  }, [devices.length]);
 
   const upsertDevice = (list, device) => {
     const exists = list.some((d) => d.id === device.id);
@@ -215,6 +247,19 @@ const DeviceManagementPage = () => {
       setError(errorMsg);
       setToast({ open: true, message: errorMsg, severity: "error" });
     }
+  };
+
+  const formatLatestData = (deviceId) => {
+    const data = latestData[deviceId];
+    if (!data) return null;
+    let display = [];
+    if (data.temperature !== undefined && data.temperature !== null) {
+      display.push(`🌡️ ${Number(data.temperature).toFixed(1)}°C`);
+    }
+    if (data.humidity !== undefined && data.humidity !== null) {
+      display.push(`💧 ${Number(data.humidity).toFixed(1)}%`);
+    }
+    return display.join(" | ") || null;
   };
 
   const filteredDevices = useMemo(() => {
@@ -410,6 +455,36 @@ const DeviceManagementPage = () => {
                           <Typography variant="body2" color="textSecondary">
                             <strong>Topic:</strong> {device.topic}
                           </Typography>
+
+                          {/* Latest Data */}
+                          <Box sx={{ 
+                            mt: 1, 
+                            p: 1, 
+                            backgroundColor: "#f0f9ff", 
+                            borderRadius: 1,
+                            border: "1px solid #cce5ff"
+                          }}>
+                            {loadingLatest[device.id] ? (
+                              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                                <CircularProgress size={16} />
+                                <Typography variant="caption" color="textSecondary">
+                                  Đang tải...
+                                </Typography>
+                              </Box>
+                            ) : latestData[device.id] === null ? (
+                              <Typography variant="caption" color="error">
+                                ❌ Không thể tải dữ liệu
+                              </Typography>
+                            ) : formatLatestData(device.id) ? (
+                              <Typography variant="body2" sx={{ fontWeight: 600, color: "#0369a1" }}>
+                                📊 {formatLatestData(device.id)}
+                              </Typography>
+                            ) : (
+                              <Typography variant="caption" color="textSecondary">
+                                ⏳ Chưa có dữ liệu
+                              </Typography>
+                            )}
+                          </Box>
                         </Stack>
 
                         <Box sx={{ display: "flex", gap: 1 }}>

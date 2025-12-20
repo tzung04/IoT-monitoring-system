@@ -55,8 +55,8 @@ export const getLatestData = async (deviceId) => {
   }
 
   try {
-    console.log(`Calling GET /data/latest/${deviceId}`);
-    const resp = await api.get(`${DATA_BASE}/latest/${deviceId}`);
+    console.log(`Calling GET /data/device/${deviceId}/latest`);
+    const resp = await api.get(`${DATA_BASE}/device/${deviceId}/latest`);
     console.log(`getLatestData(${deviceId}) response:`, resp.data);
 
     if (!resp.data) {
