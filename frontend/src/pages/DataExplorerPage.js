@@ -90,29 +90,40 @@ const DataExplorerPage = () => {
       setSensorData(dataPoints);
       
       // Transform data for chart
-      const temperature = [];
-      const humidity = [];
-      
+      const chartDataMap = new Map();
+
       dataPoints.forEach((point) => {
-        const timestamp = new Date(point.timestamp).toLocaleTimeString("vi-VN");
+        const timeKey = new Date(point.timestamp).toLocaleTimeString("vi-VN", {
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        
+        if (!chartDataMap.has(timeKey)) {
+          chartDataMap.set(timeKey, {
+            label: timeKey,
+            timestamp: point.timestamp
+          });
+        }
+        
+        const entry = chartDataMap.get(timeKey);
         if (point.metric_type === "temperature") {
-          temperature.push({
-            time: timestamp,
-            value: Number(point.value),
-            timestamp: point.timestamp,
-          });
+          entry.temperature = Number(point.value);
         } else if (point.metric_type === "humidity") {
-          humidity.push({
-            time: timestamp,
-            value: Number(point.value),
-            timestamp: point.timestamp,
-          });
+          entry.humidity = Number(point.value);
         }
       });
 
+      // Convert Map to sorted array
+      const chartDataArray = Array.from(chartDataMap.values()).sort(
+        (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+      );
+
       setChartData({
-        temperature: temperature.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)),
-        humidity: humidity.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)),
+        data: chartDataArray,
+        series: [
+          { dataKey: "temperature", name: "🌡️ Temperature (°C)", color: "#ff6b6b" },
+          { dataKey: "humidity", name: "💧 Humidity (%)", color: "#4ecdc4" }
+        ],
         device: response.device,
         timeRange: response.timeRange,
       });
@@ -388,29 +399,61 @@ const DataExplorerPage = () => {
               </>
             )}
             {stats?.humidity && (
-              <Grid item xs={6} sm={3}>
-                <Card>
-                  <CardContent sx={{ textAlign: "center" }}>
-                    <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
-                      💧 Avg Humidity
-                    </Typography>
-                    <Typography variant="h5" sx={{ fontWeight: 700, color: "info.main" }}>
-                      {stats.humidity.avg}%
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
+              <>
+                <Grid item xs={6} sm={3}>
+                  <Card>
+                    <CardContent sx={{ textAlign: "center" }}>
+                      <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
+                        💧 Humidity Min
+                      </Typography>
+                      <Typography variant="h5" sx={{ fontWeight: 700, color: "primary.main" }}>
+                        {stats.humidity.min.toFixed(1)}%
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <Card>
+                    <CardContent sx={{ textAlign: "center" }}>
+                      <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
+                        💧 Humidity Avg
+                      </Typography>
+                      <Typography variant="h5" sx={{ fontWeight: 700, color: "info.main" }}>
+                        {stats.humidity.avg}%
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <Card>
+                    <CardContent sx={{ textAlign: "center" }}>
+                      <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
+                        💧 Humidity Max
+                      </Typography>
+                      <Typography variant="h5" sx={{ fontWeight: 700, color: "error.main" }}>
+                        {stats.humidity.max.toFixed(1)}%
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </>
             )}
           </Grid>
 
           {/* Chart */}
-          {chartData && (
+          {chartData && chartData.data && (
             <Card>
               <CardContent>
                 <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
                   📊 Biểu đồ dữ liệu
                 </Typography>
-                <HistoricalChart data={chartData} />
+                <HistoricalChart 
+                  data={chartData.data}
+                  series={chartData.series}
+                  xKey="label"
+                  height={400}
+                  stacked={false}
+                />
               </CardContent>
             </Card>
           )}

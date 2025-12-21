@@ -37,6 +37,8 @@ const CONDITION_MAP = {
   "<": "less_than",
   "=": "equal",
   "!=": "not_equal",
+  "≤": "less_than_or_equal",
+  "≥": "greeter_than_or_equal"
 };
 
 // Reverse map: backend condition to display symbol
@@ -45,6 +47,8 @@ const CONDITION_REVERSE_MAP = {
   "less_than": "<",
   "equal": "=",
   "not_equal": "!=",
+  "greeter_than_or_equal": "≥",
+  "greeter_than_or_equal": "≥"
 };
 
 const AlertManagementPage = () => {
