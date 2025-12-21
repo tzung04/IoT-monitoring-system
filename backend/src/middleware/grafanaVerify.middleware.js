@@ -17,7 +17,7 @@ async function getCachedUserDevices(userId) {
     return cached.devices;
   }
   
-  // Cache miss hoặc expire → query DB
+  // Cache miss hoặc expire => query DB
   const devices = await Device.findByUserId(userId);
   deviceCache.set(userId, { devices, timestamp: now });
   
@@ -47,8 +47,6 @@ const grafanaVerifyMiddleware = async (req, res, next) => {
     }
     
     // Lấy deviceNames từ URL
-    // QUAN TRỌNG: var-devices có thể xuất hiện nhiều lần
-    // req.query['var-devices'] có thể là string hoặc array
     let deviceNamesInput = devices || device;
     
     if (!deviceNamesInput) {
@@ -62,11 +60,10 @@ const grafanaVerifyMiddleware = async (req, res, next) => {
     if (Array.isArray(deviceNamesInput)) {
       // Trường hợp: var-devices=A&var-devices=B → ['A', 'B']
       deviceNameArray = deviceNamesInput;
-    } //else if (typeof deviceNamesInput === 'string') {
-      // Trường hợp: var-devices=A,B hoặc var-devices=A
-      //deviceNameArray = deviceNamesInput.split(',').map(name => name.trim());
-    //} 
-    else {
+    } else if (typeof deviceNamesInput === 'string') {
+      // Trường hợp: var-devices=A
+      deviceNameArray = deviceNamesInput.split(',').map(name => name.trim());
+    } else {
       return res.status(403).json({ 
         message: 'Access denied: Invalid device format' 
       });

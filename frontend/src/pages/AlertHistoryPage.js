@@ -1,40 +1,50 @@
 import React, { useEffect, useState } from "react";
 import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Stack,
-  TextField,
-  Select,
-  MenuItem,
-  Button,
-  Chip,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TablePagination,
-  CircularProgress,
-  Snackbar,
-  Alert,
-  Grid,
+  Box, Card, CardContent, Typography, Stack, TextField, Select, MenuItem,
+  Button, Chip, Table, TableBody, TableCell, TableContainer, TableHead,
+  TableRow, TablePagination, CircularProgress, Snackbar, Alert, Grid
 } from "@mui/material";
-import RefreshIcon from "@mui/icons-material/Refresh";
-import FileDownloadIcon from "@mui/icons-material/FileDownload";
-import ClearIcon from "@mui/icons-material/Clear";
+
+import {
+  Refresh as RefreshIcon,
+  FileDownload as FileDownloadIcon,
+  Clear as ClearIcon,
+  FilterList as FilterListIcon,
+  Thermostat,           // Nhiệt độ
+  WaterDrop,            // Độ ẩm
+  NotificationsActive,  // Cảnh báo chung
+  Sensors,              // Thiết bị
+  AccessTime            // Thời gian
+} from "@mui/icons-material";
+
 import sensorService from "../services/sensor.service";
 import deviceService from "../services/device.service";
 import { trackEvent } from "../observability/faro";
+
+// Helper map icon
+const METRIC_ICONS = {
+  temperature: <Thermostat color="error" fontSize="small" />,
+  humidity: <WaterDrop color="primary" fontSize="small" />,
+};
+
+// Helper: Parse type từ message
+const parseAlertType = (message) => {
+  if (!message) return "unknown";
+  const msg = message.toLowerCase();
+  if (msg.includes("temperature") || msg.includes("nhiệt độ")) return "temperature";
+  if (msg.includes("humidity") || msg.includes("độ ẩm")) return "humidity";
+  return "unknown";
+};
 
 const AlertHistoryPage = () => {
   const [alerts, setAlerts] = useState([]);
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(false);
+  
+  // Pagination
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  
   const [toast, setToast] = useState({ open: false, message: "", severity: "info" });
 
   // Filter states
@@ -53,9 +63,13 @@ const AlertHistoryPage = () => {
   const loadInitialData = async () => {
     try {
       setLoading(true);
-      const deviceList = await deviceService.getDevices();
+      const [deviceList, alertData] = await Promise.all([
+        deviceService.getDevices(),
+        fetchAlertsInternal({})
+      ]);
+      
       setDevices(deviceList || []);
-      await loadAlerts();
+      setAlerts(alertData || []);
     } catch (err) {
       console.error("Load initial data error:", err);
       setToast({ open: true, message: "Không thể tải dữ liệu", severity: "error" });
@@ -64,75 +78,71 @@ const AlertHistoryPage = () => {
     }
   };
 
-  const loadAlerts = async () => {
-    try {
-      const params = {};
-      if (filters.deviceId) params.device_id = Number(filters.deviceId);
-      if (filters.fromDate) params.from = filters.fromDate;
-      if (filters.toDate) params.to = filters.toDate;
+  // Hàm nội bộ để fetch và transform data
+  const fetchAlertsInternal = async (currentFilters) => {
+    const params = {};
+    if (currentFilters.deviceId) params.device_id = Number(currentFilters.deviceId);
+    if (currentFilters.fromDate) params.from = currentFilters.fromDate;
+    if (currentFilters.toDate) params.to = currentFilters.toDate;
 
-      const alertHistory = await sensorService.getAlertHistory(
-        params.device_id || null,
-        params.from || null,
-        params.to || null
-      );
+    const data = await sensorService.getAlertHistory(
+      params.device_id || null,
+      params.from || null,
+      params.to || null
+    );
 
-      // Transform and filter alerts
-      let transformedAlerts = (alertHistory || [])
-        .sort((a, b) => new Date(b.triggered_at || b.timestamp) - new Date(a.triggered_at || a.timestamp))
-        .map((alert) => ({
+    let transformed = (data || [])
+      .sort((a, b) => new Date(b.triggered_at || b.timestamp) - new Date(a.triggered_at || a.timestamp))
+      .map((alert) => {
+        const type = parseAlertType(alert.message);
+        const value = alert.value_at_time;
+        const severity = alert.rule_severity ; 
+        
+        return {
           ...alert,
-          id: alert.id || alert.alert_rule_id,
+          id: alert.id || alert.rule_id,
           deviceId: alert.device_id,
+          deviceName: alert.device_name, 
           timestamp: alert.triggered_at || alert.timestamp,
-          severity: alert.severity || "medium",
-        }));
-
-      // Filter by severity if specified
-      if (filters.severity) {
-        transformedAlerts = transformedAlerts.filter(
-          (a) => a.severity === filters.severity
-        );
-      }
-
-      setAlerts(transformedAlerts);
-      setPage(0); // Reset to first page
-      
-      trackEvent("alert_history_loaded", {
-        count: transformedAlerts.length,
-        filters: Object.keys(filters).reduce((acc, key) => {
-          if (filters[key]) acc[key] = 1;
-          return acc;
-        }, {}),
+          severity: severity,
+          type: type,
+          value: value 
+        };
       });
+
+    // Client-side filtering cho severity
+    if (currentFilters.severity) {
+      transformed = transformed.filter((a) => a.severity === currentFilters.severity);
+    }
+    
+    return transformed;
+  };
+
+  const handleApplyFilters = async () => {
+    setLoading(true);
+    try {
+      const data = await fetchAlertsInternal(filters);
+      setAlerts(data);
+      setPage(0);
+      trackEvent("alert_history_filter", filters);
     } catch (err) {
-      console.error("Load alerts error:", err);
-      setToast({ open: true, message: "Không thể tải lịch sử cảnh báo", severity: "error" });
-      setAlerts([]);
+      setToast({ open: true, message: "Lỗi khi lọc dữ liệu", severity: "error" });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleFilterChange = (key, value) => {
-    setFilters({ ...filters, [key]: value });
-  };
-
-  const handleApplyFilters = () => {
-    loadAlerts();
-  };
-
   const handleClearFilters = () => {
-    setFilters({
-      deviceId: "",
-      severity: "",
-      fromDate: "",
-      toDate: "",
-    });
-    // Load alerts without filters
-    setTimeout(() => loadAlerts(), 0);
+    const emptyFilters = { deviceId: "", severity: "", fromDate: "", toDate: "" };
+    setFilters(emptyFilters);
+    setLoading(true);
+    fetchAlertsInternal(emptyFilters)
+      .then(data => setAlerts(data))
+      .finally(() => setLoading(false));
   };
 
   const handleRefresh = () => {
-    loadAlerts();
+    handleApplyFilters();
     setToast({ open: true, message: "Đã làm mới dữ liệu", severity: "success" });
   };
 
@@ -152,38 +162,32 @@ const AlertHistoryPage = () => {
     }
 
     const headers = ["Thời gian", "Thiết bị", "Loại cảnh báo", "Giá trị", "Mức độ", "Tin nhắn"];
-    const rows = alerts.map((alert) => {
-      const device = devices.find((d) => d.id === alert.deviceId);
-      return [
-        new Date(alert.timestamp).toLocaleString("vi-VN"),
-        device?.name || `Device #${alert.deviceId}`,
-        alert.type || "Unknown",
-        alert.value || "N/A",
-        alert.severity || "N/A",
-        alert.message || "",
-      ];
-    });
+    const rows = alerts.map((alert) => [
+      new Date(alert.timestamp).toLocaleString("vi-VN"),
+      alert.deviceName || `Device #${alert.deviceId}`,
+      alert.type,
+      alert.value || "N/A",
+      alert.severity,
+      alert.message || "",
+    ]);
 
-    const csv = [
+    const csvContent = [
       headers.join(","),
       ...rows.map((row) => row.map((cell) => `"${cell}"`).join(",")),
     ].join("\n");
 
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute(
-      "download",
-      `alert_history_${new Date().getTime()}.csv`
-    );
-    link.style.visibility = "hidden";
+    link.setAttribute("download", `alert_history_${new Date().getTime()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 
     trackEvent("alert_history_exported", { count: alerts.length });
-    setToast({ open: true, message: "Đã xuất dữ liệu", severity: "success" });
+    setToast({ open: true, message: "Đã xuất dữ liệu thành công", severity: "success" });
   };
 
   const displayedAlerts = alerts.slice(
@@ -193,192 +197,143 @@ const AlertHistoryPage = () => {
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 2, p: 2 }}>
-      <Box>
-        <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
-          📊 Lịch sử Cảnh báo
-        </Typography>
-        <Typography variant="body2" color="textSecondary">
-          Xem và quản lý tất cả các sự kiện cảnh báo từ các thiết bị
-        </Typography>
+      {/* Header */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+        <AccessTime color="primary" sx={{ fontSize: 40 }} />
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 700 }}>
+            Lịch sử Cảnh báo
+          </Typography>
+          <Typography variant="body2" color="textSecondary">
+            Xem lại toàn bộ sự kiện cảnh báo đã xảy ra
+          </Typography>
+        </Box>
       </Box>
 
-      {loading && alerts.length === 0 ? (
-        <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", py: 8 }}>
-          <CircularProgress />
-        </Box>
-      ) : (
-        <>
-          {/* Filters */}
-          <Card>
-            <CardContent>
-              <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-                🔍 Bộ lọc
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Select
-                    fullWidth
-                    size="small"
-                    displayEmpty
-                    value={filters.deviceId}
-                    onChange={(e) => handleFilterChange("deviceId", e.target.value)}
-                    renderValue={(value) =>
-                      value ? (
-                        devices.find((d) => d.id === Number(value))?.name || `Device #${value}`
-                      ) : (
-                        <span style={{ color: "#9e9e9e" }}>Tất cả thiết bị</span>
-                      )
-                    }
-                  >
-                    {devices.map((device) => (
-                      <MenuItem key={device.id} value={device.id}>
-                        {device.name} (#{device.id})
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </Grid>
-
-                <Grid item xs={12} sm={6} md={3}>
-                  <Select
-                    fullWidth
-                    size="small"
-                    displayEmpty
-                    value={filters.severity}
-                    onChange={(e) => handleFilterChange("severity", e.target.value)}
-                    renderValue={(value) =>
-                      value ? (
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                          {value === "high" && "🔴"}
-                          {value === "medium" && "🟡"}
-                          {value === "low" && "🟢"}
-                          {value.charAt(0).toUpperCase() + value.slice(1)}
-                        </Box>
-                      ) : (
-                        <span style={{ color: "#9e9e9e" }}>Tất cả mức độ</span>
-                      )
-                    }
-                  >
-                    <MenuItem value="high">🔴 High</MenuItem>
-                    <MenuItem value="medium">🟡 Medium</MenuItem>
-                    <MenuItem value="low">🟢 Low</MenuItem>
-                  </Select>
-                </Grid>
-
-                <Grid item xs={12} sm={6} md={3}>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    type="datetime-local"
-                    label="Từ ngày"
-                    InputLabelProps={{ shrink: true }}
-                    value={filters.fromDate}
-                    onChange={(e) => handleFilterChange("fromDate", e.target.value)}
-                  />
-                </Grid>
-
-                <Grid item xs={12} sm={6} md={3}>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    type="datetime-local"
-                    label="Đến ngày"
-                    InputLabelProps={{ shrink: true }}
-                    value={filters.toDate}
-                    onChange={(e) => handleFilterChange("toDate", e.target.value)}
-                  />
-                </Grid>
-              </Grid>
-
-              <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
-                <Button
-                  variant="contained"
-                  size="small"
-                  onClick={handleApplyFilters}
-                >
-                  Áp dụng bộ lọc
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={<ClearIcon />}
-                  onClick={handleClearFilters}
-                >
-                  Xóa bộ lọc
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={<RefreshIcon />}
-                  onClick={handleRefresh}
-                >
-                  Làm mới
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={<FileDownloadIcon />}
-                  onClick={handleExportCSV}
-                >
-                  Xuất CSV
-                </Button>
-              </Stack>
-            </CardContent>
-          </Card>
-
-          {/* Stats */}
+      {/* Filters Card */}
+      <Card variant="outlined">
+        <CardContent>
+          <Stack direction="row" alignItems="center" gap={1} mb={2}>
+            <FilterListIcon color="action" />
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              Bộ lọc tìm kiếm
+            </Typography>
+          </Stack>
+          
           <Grid container spacing={2}>
-            <Grid item xs={6} sm={3}>
-              <Card>
-                <CardContent sx={{ textAlign: "center" }}>
-                  <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
-                    Tổng cộng
-                  </Typography>
-                  <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                    {alerts.length}
-                  </Typography>
-                </CardContent>
-              </Card>
+            <Grid item xs={12} sm={6} md={3}>
+              <Select
+                fullWidth
+                size="small"
+                displayEmpty
+                value={filters.deviceId}
+                onChange={(e) => setFilters({ ...filters, deviceId: e.target.value })}
+              >
+                <MenuItem value="">
+                  <span style={{ color: "#9e9e9e" }}>Tất cả thiết bị</span>
+                </MenuItem>
+                {devices.map((device) => (
+                  <MenuItem key={device.id} value={device.id}>
+                    {device.name} (#{device.id})
+                  </MenuItem>
+                ))}
+              </Select>
             </Grid>
-            <Grid item xs={6} sm={3}>
-              <Card>
-                <CardContent sx={{ textAlign: "center" }}>
-                  <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
-                    🔴 High
-                  </Typography>
-                  <Typography variant="h5" sx={{ fontWeight: 700, color: "error.main" }}>
-                    {alerts.filter((a) => a.severity === "high").length}
-                  </Typography>
-                </CardContent>
-              </Card>
+
+            <Grid item xs={12} sm={6} md={3}>
+              <Select
+                fullWidth
+                size="small"
+                displayEmpty
+                value={filters.severity}
+                onChange={(e) => setFilters({ ...filters, severity: e.target.value })}
+              >
+                <MenuItem value="">
+                  <span style={{ color: "#9e9e9e" }}>Tất cả mức độ</span>
+                </MenuItem>
+                <MenuItem value="high">🔴 High (Cao)</MenuItem>
+                <MenuItem value="medium">🟡 Medium (Trung bình)</MenuItem>
+                <MenuItem value="low">🟢 Low (Thấp)</MenuItem>
+              </Select>
             </Grid>
-            <Grid item xs={6} sm={3}>
-              <Card>
-                <CardContent sx={{ textAlign: "center" }}>
-                  <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
-                    🟡 Medium
-                  </Typography>
-                  <Typography variant="h5" sx={{ fontWeight: 700, color: "warning.main" }}>
-                    {alerts.filter((a) => a.severity === "medium").length}
-                  </Typography>
-                </CardContent>
-              </Card>
+
+            <Grid item xs={12} sm={6} md={3}>
+              <TextField
+                fullWidth
+                size="small"
+                type="datetime-local"
+                label="Từ ngày"
+                InputLabelProps={{ shrink: true }}
+                value={filters.fromDate}
+                onChange={(e) => setFilters({ ...filters, fromDate: e.target.value })}
+              />
             </Grid>
-            <Grid item xs={6} sm={3}>
-              <Card>
-                <CardContent sx={{ textAlign: "center" }}>
-                  <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
-                    🟢 Low
-                  </Typography>
-                  <Typography variant="h5" sx={{ fontWeight: 700, color: "success.main" }}>
-                    {alerts.filter((a) => a.severity === "low").length}
-                  </Typography>
-                </CardContent>
-              </Card>
+
+            <Grid item xs={12} sm={6} md={3}>
+              <TextField
+                fullWidth
+                size="small"
+                type="datetime-local"
+                label="Đến ngày"
+                InputLabelProps={{ shrink: true }}
+                value={filters.toDate}
+                onChange={(e) => setFilters({ ...filters, toDate: e.target.value })}
+              />
             </Grid>
           </Grid>
 
-          {/* Alerts Table */}
-          <Card>
+          <Stack direction="row" spacing={1} sx={{ mt: 3, justifyContent: 'flex-end' }}>
+            <Button variant="outlined" color="inherit" onClick={handleClearFilters} startIcon={<ClearIcon />}>
+              Xóa bộ lọc
+            </Button>
+            <Button variant="contained" onClick={handleApplyFilters} startIcon={<FilterListIcon />}>
+              Áp dụng
+            </Button>
+          </Stack>
+        </CardContent>
+      </Card>
+
+      {/* Stats Summary */}
+      <Grid container spacing={2}>
+        {[
+          { label: "Tổng số", value: alerts.length, color: "text.primary" },
+          { label: "Nguy hiểm (High)", value: alerts.filter(a => a.severity === 'high').length, color: "error.main" },
+          { label: "Cảnh báo (Medium)", value: alerts.filter(a => a.severity === 'medium').length, color: "warning.main" },
+          { label: "Thông tin (Low)", value: alerts.filter(a => a.severity === 'low').length, color: "success.main" },
+        ].map((stat, index) => (
+           <Grid item xs={6} sm={3} key={index}>
+             <Card variant="outlined">
+               <CardContent sx={{ textAlign: "center", py: 2 }}>
+                 <Typography variant="h4" sx={{ fontWeight: 700, color: stat.color }}>
+                   {stat.value}
+                 </Typography>
+                 <Typography variant="body2" color="textSecondary">
+                   {stat.label}
+                 </Typography>
+               </CardContent>
+             </Card>
+           </Grid>
+        ))}
+      </Grid>
+
+      {/* Action Bar */}
+      <Stack direction="row" justifyContent="flex-end" spacing={1}>
+        <Button size="small" startIcon={<RefreshIcon />} onClick={handleRefresh}>
+          Làm mới
+        </Button>
+        <Button size="small" startIcon={<FileDownloadIcon />} onClick={handleExportCSV}>
+          Xuất CSV
+        </Button>
+      </Stack>
+
+      {/* Alerts Table */}
+      <Card variant="outlined">
+        {loading ? (
+           <Box sx={{ display: "flex", justifyContent: "center", p: 5 }}>
+             <CircularProgress />
+           </Box>
+        ) : (
+          <>
             <TableContainer>
               <Table>
                 <TableHead sx={{ backgroundColor: "#f5f5f5" }}>
@@ -388,62 +343,60 @@ const AlertHistoryPage = () => {
                     <TableCell sx={{ fontWeight: 600 }}>Loại cảnh báo</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Giá trị</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Mức độ</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>Tin nhắn</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Nội dung</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {displayedAlerts.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
-                        <Typography color="textSecondary">
-                          Không có cảnh báo nào phù hợp.
-                        </Typography>
+                      <TableCell colSpan={6} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                        Không tìm thấy dữ liệu cảnh báo phù hợp.
                       </TableCell>
                     </TableRow>
                   ) : (
                     displayedAlerts.map((alert) => {
-                      const device = devices.find((d) => d.id === alert.deviceId);
                       return (
                         <TableRow
                           key={alert.id}
+                          hover
                           sx={{
-                            "&:hover": { backgroundColor: "#f9f9f9" },
                             backgroundColor:
-                              alert.severity === "high"
-                                ? "#ffebee"
-                                : alert.severity === "medium"
-                                ? "#fff8e1"
-                                : "transparent",
+                              alert.severity === "high" ? "#fff0f0" : 
+                              alert.severity === "medium" ? "#fffde7" : "inherit",
                           }}
                         >
-                          <TableCell sx={{ fontSize: "0.875rem" }}>
+                          <TableCell>
                             {new Date(alert.timestamp).toLocaleString("vi-VN")}
                           </TableCell>
-                          <TableCell sx={{ fontSize: "0.875rem" }}>
-                            {device?.name || `Device #${alert.deviceId}`}
+                          <TableCell>
+                            <Stack direction="row" alignItems="center" spacing={1}>
+                                <Sensors fontSize="small" color="action"/>
+                                <Typography variant="body2">
+                                    {alert.deviceName || `Device #${alert.deviceId}`}
+                                </Typography>
+                            </Stack>
                           </TableCell>
-                          <TableCell sx={{ fontSize: "0.875rem" }}>
-                            {alert.type || "Unknown"}
+                          <TableCell>
+                            <Stack direction="row" alignItems="center" spacing={1}>
+                                {METRIC_ICONS[alert.type] || <NotificationsActive fontSize="small" color="disabled"/>}
+                                <span style={{ textTransform: 'capitalize' }}>{alert.type}</span>
+                            </Stack>
                           </TableCell>
-                          <TableCell sx={{ fontSize: "0.875rem" }}>
-                            {alert.value || "N/A"}
+                          <TableCell sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
+                            {alert.value !== null && alert.value !== undefined ? alert.value : "-"}
                           </TableCell>
-                          <TableCell sx={{ fontSize: "0.875rem" }}>
+                          <TableCell>
                             <Chip
-                              label={alert.severity || "N/A"}
+                              label={alert.severity}
                               color={
-                                alert.severity === "high"
-                                  ? "error"
-                                  : alert.severity === "medium"
-                                  ? "warning"
-                                  : "default"
+                                alert.severity === "high" ? "error" : 
+                                alert.severity === "medium" ? "warning" : "default"
                               }
                               size="small"
+                              variant={alert.severity === "low" ? "outlined" : "filled"}
                             />
                           </TableCell>
-                          <TableCell sx={{ fontSize: "0.875rem" }}>
-                            {alert.message || "-"}
-                          </TableCell>
+                          <TableCell>{alert.message}</TableCell>
                         </TableRow>
                       );
                     })
@@ -459,11 +412,11 @@ const AlertHistoryPage = () => {
               page={page}
               onPageChange={handleChangePage}
               onRowsPerPageChange={handleChangeRowsPerPage}
-              labelRowsPerPage="Hàng mỗi trang:"
+              labelRowsPerPage="Số hàng:"
             />
-          </Card>
-        </>
-      )}
+          </>
+        )}
+      </Card>
 
       <Snackbar
         open={toast.open}
@@ -471,11 +424,7 @@ const AlertHistoryPage = () => {
         onClose={() => setToast({ ...toast, open: false })}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
-        <Alert
-          severity={toast.severity}
-          onClose={() => setToast({ ...toast, open: false })}
-          sx={{ width: "100%" }}
-        >
+        <Alert severity={toast.severity} onClose={() => setToast({ ...toast, open: false })} sx={{ width: "100%" }}>
           {toast.message}
         </Alert>
       </Snackbar>

@@ -14,8 +14,6 @@ import {
   Divider,
   CircularProgress,
   Alert,
-  Tabs,
-  Tab,
 } from "@mui/material";
 import DeviceHubIcon from "@mui/icons-material/DeviceHub";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
@@ -35,19 +33,21 @@ const DashboardPage = () => {
   const [loading, setLoading] = useState(true);
   const [grafanaUrl, setGrafanaUrl] = useState("");
   const [grafanaError, setGrafanaError] = useState(null);
-  const [selectedTab, setSelectedTab] = useState(0);
 
   const normalizeAlerts = (list, limit = 50) => {
     const seen = new Set();
     const sorted = [...list].sort(
-      (a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()
+      (a, b) => new Date(b.triggered_at || 0).getTime() - new Date(a.triggered_at || 0).getTime()
     );
     const uniq = [];
     sorted.forEach((item) => {
-      const key = item.id || `${item.type}-${item.timestamp}`;
+      const key = item.id || `${item.type}-${item.triggered_at}`;
       if (!seen.has(key)) {
         seen.add(key);
-        uniq.push(item);
+        uniq.push({
+          ...item,
+          severity: item.rule_severity || "medium"
+        });
       }
     });
     return uniq.slice(0, limit);
@@ -78,7 +78,7 @@ const DashboardPage = () => {
         if (dashboardData && dashboardData.embedUrl) {
           setGrafanaUrl(dashboardData.embedUrl);
         } else {
-          setGrafanaError("Không thể tải Grafana dashboard");
+          setGrafanaError("Chưa có thiết bị để hiển thị!");
         }
       } catch (err) {
         console.error("Load dashboard error:", err);
@@ -95,6 +95,12 @@ const DashboardPage = () => {
         setDevices(Array.isArray(deviceList) ? deviceList : []);
       }).catch(err => {
         console.error("Auto-refresh error:", err);
+      });
+      
+      sensorService.getAllAlertHistory().then(alertHistory => {
+        setAlerts(normalizeAlerts(Array.isArray(alertHistory) ? alertHistory : []));
+      }).catch(err => {
+        console.error("Alert refresh error:", err);
       });
     }, 60000);
     
@@ -133,11 +139,11 @@ const DashboardPage = () => {
     if (message.type === "alert") {
       setAlerts((prev) => normalizeAlerts([message.data, ...prev]));
       pushEvent({
-        key: `alert-${message.data?.id || message.data?.timestamp || Date.now()}`,
+        key: `alert-${message.data?.id || message.data?.triggered_at || Date.now()}`,
         ts: Date.now(),
         label: message.data?.message || "New alert",
         type: "alert",
-        severity: message.data?.severity,
+        severity: message.data?.rule_severity || message.data?.severity,
       });
     }
   });
@@ -147,9 +153,11 @@ const DashboardPage = () => {
     const online = devices.filter((d) => d.status === "online").length;
     const offline = devices.filter((d) => d.status === "offline").length;
     const inactive = devices.filter((d) => d.status === "inactive").length;
+    
     const recentAlerts = alerts.filter((a) => {
-      if (!a.timestamp) return false;
-      const alertTime = new Date(a.timestamp).getTime();
+      const timestamp = a.triggered_at || a.timestamp;
+      if (!timestamp) return false;
+      const alertTime = new Date(timestamp).getTime();
       const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
       return alertTime > oneDayAgo;
     }).length;
@@ -216,12 +224,6 @@ const DashboardPage = () => {
             />
           </Stack>
 
-          <Tabs value={selectedTab} onChange={(e, val) => setSelectedTab(val)} sx={{ mb: 2 }}>
-            <Tab label="Overview Dashboard" />
-            <Tab label="Temperature" />
-            <Tab label="Humidity" />
-          </Tabs>
-
           {loading ? (
             <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
               <CircularProgress />
@@ -267,6 +269,7 @@ const DashboardPage = () => {
                 <List dense>
                   {recentAlerts.map((a) => {
                     const chip = statusChip(a.severity);
+                    const timestamp = a.triggered_at || a.timestamp;
                     return (
                       <ListItem key={a.id} alignItems="flex-start" divider>
                         <ListItemText
@@ -284,10 +287,10 @@ const DashboardPage = () => {
                           secondary={
                             <Stack spacing={0.5}>
                               <Typography variant="body2" color="text.secondary">
-                                Device #{a.deviceId} • {a.type} {a.condition || ""} {a.value}
+                                Device #{a.device_id} • {a.device_name || `Device ${a.device_id}`}
                               </Typography>
                               <Typography variant="caption" color="text.secondary">
-                                {a.timestamp ? new Date(a.timestamp).toLocaleString() : ""}
+                                {timestamp ? new Date(timestamp).toLocaleString() : ""}
                               </Typography>
                             </Stack>
                           }
@@ -305,10 +308,12 @@ const DashboardPage = () => {
           <Card sx={{ height: "100%" }}>
             <CardContent>
               <Typography variant="subtitle1" gutterBottom>
-                Hoạt động realtime
+                Hoạt động gần đây
               </Typography>
               {events.length === 0 ? (
-                <Typography color="text.secondary">Chưa có hoạt động.</Typography>
+                <Typography color="text.secondary">
+                  {loading ? "Đang tải..." : "Chưa có hoạt động mới."}
+                </Typography>
               ) : (
                 <List dense>
                   {events.map((e, idx) => (

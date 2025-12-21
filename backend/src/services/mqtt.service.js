@@ -1,8 +1,8 @@
 import { getMQTTClient } from '../config/mqtt.js';
 import Device from '../models/device.model.js';
 import { writeSensorData } from '../config/influxdb.js';
-import AlertRule from '../models/alertRule.model.js'; // Model AlertRule
-import AlertLog from '../models/alertLog.model.js';   // Model AlertLog
+import AlertRule from '../models/alertRule.model.js'; 
+import AlertLog from '../models/alertLog.model.js'; 
 import emailService from '../services/email.service.js'
 
 const TOPIC_PROVISION_REQ = 'system/provisioning/req';
@@ -32,8 +32,8 @@ class MQTTService {
             'less_than': '<',
             'equal': '=',
             'not_equal': '!=',
-            'greater_than_or_equal': '>=',
-            'less_than_or_equal': '<=',
+            "greater_than_or_equal": "≥",
+            "less_than_or_equal": "≤"
         };
       
       const rules = await AlertRule.findEnabledByDeviceId(device.id);
@@ -66,6 +66,7 @@ class MQTTService {
           await AlertLog.create({
             device_id: device.id,
             rule_id: rule.id,
+            rule_severity: rule.severity,
             value_at_time: sensorValue,
             message: message,
           });

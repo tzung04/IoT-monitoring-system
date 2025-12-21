@@ -1,7 +1,7 @@
 import pool from "../config/database.js";
 import { fileURLToPath } from "url";
 
-async function setupDatabase() {
+export async function setupDatabase() {
   const client = await pool.connect();
 
   try {
@@ -22,6 +22,15 @@ async function setupDatabase() {
     await client.query(`
       DO $$ BEGIN
         CREATE TYPE alert_condition AS ENUM ('greater_than', 'less_than', 'equal', 'not_equal', 'greater_than_or_equal', 'less_than_or_equal');
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `);
+
+    // Create severity_level enum ---
+    await client.query(`
+      DO $$ BEGIN
+        CREATE TYPE severity_level AS ENUM ('low', 'medium', 'high');
       EXCEPTION
         WHEN duplicate_object THEN null;
       END $$;
@@ -77,6 +86,7 @@ async function setupDatabase() {
         condition alert_condition NOT NULL,
         threshold FLOAT NOT NULL,
         email_to VARCHAR(255) NOT NULL,
+        severity severity_level DEFAULT 'medium', 
         is_enabled BOOLEAN DEFAULT true,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -88,6 +98,7 @@ async function setupDatabase() {
         id SERIAL PRIMARY KEY,
         device_id INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
         rule_id INTEGER NOT NULL REFERENCES alert_rules(id) ON DELETE CASCADE,
+        rule_severity severity_level DEFAULT 'medium',
         value_at_time FLOAT NOT NULL,
         message TEXT NOT NULL,
         triggered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
