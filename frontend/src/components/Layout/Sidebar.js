@@ -3,6 +3,8 @@ import { Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText } fr
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import DevicesIcon from "@mui/icons-material/Devices";
 import WarningIcon from "@mui/icons-material/Warning";
+import HistoryIcon from "@mui/icons-material/History";
+import TimelineIcon from "@mui/icons-material/Timeline";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import { useNavigate, useLocation } from "react-router-dom";
 
@@ -14,6 +16,8 @@ const Sidebar = () => {
     { text: "Dashboard", icon: <DashboardIcon />, path: "/" },
     { text: "Devices", icon: <DevicesIcon />, path: "/devices" },
     { text: "Alerts", icon: <WarningIcon />, path: "/alerts" },
+    { text: "Alert History", icon: <HistoryIcon />, path: "/alert-history" },
+    { text: "Data Explorer", icon: <TimelineIcon />, path: "/data-explorer" },
     { text: "Reports", icon: <AssessmentIcon />, path: "/reports" },
   ];
 

@@ -23,12 +23,15 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 import useSocket from "../hooks/useSocket";
+import useAuth from "../hooks/useAuth";
 import alertService from "../services/alert.service";
 import deviceService from "../services/device.service";
+import sensorService from "../services/sensor.service";
 import { trackEvent } from "../observability/faro";
 
 const MAX_ALERTS = 50;
 
+// Map between display symbols and backend condition values
 const CONDITION_MAP = {
   ">": "greater_than",
   "<": "less_than",
@@ -36,8 +39,18 @@ const CONDITION_MAP = {
   "!=": "not_equal",
 };
 
+// Reverse map: backend condition to display symbol
+const CONDITION_REVERSE_MAP = {
+  "greater_than": ">",
+  "less_than": "<",
+  "equal": "=",
+  "not_equal": "!=",
+};
+
 const AlertManagementPage = () => {
+  const { user } = useAuth();
   const [alerts, setAlerts] = useState([]);
+  const [alertsLoading, setAlertsLoading] = useState(false);
   const [rules, setRules] = useState([]);
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -73,7 +86,42 @@ const AlertManagementPage = () => {
         
         // Then, load rules for all devices
         const ruleList = await alertService.getRules(deviceList || []);
-        setRules(ruleList || []);
+        
+        // Transform backend data to frontend format
+        const transformedRules = (ruleList || []).map(rule => ({
+          ...rule,
+          // Map backend field names to frontend names
+          deviceId: rule.device_id,
+          type: rule.metric_type,
+          active: rule.is_enabled,
+          condition: CONDITION_REVERSE_MAP[rule.condition] || rule.condition,
+          severity: rule.severity || "medium",
+          emailTo: rule.email_to || "",
+        }));
+        
+        setRules(transformedRules);
+        
+        // Load recent alert history from backend
+        setAlertsLoading(true);
+        try {
+          const alertHistory = await sensorService.getAlertHistory();
+          // Transform alert history to frontend format
+          const transformedAlerts = (alertHistory || [])
+            .sort((a, b) => new Date(b.triggered_at || b.timestamp) - new Date(a.triggered_at || a.timestamp))
+            .slice(0, MAX_ALERTS)
+            .map(alert => ({
+              ...alert,
+              id: alert.id || alert.alert_rule_id,
+              deviceId: alert.device_id,
+              timestamp: alert.triggered_at || alert.timestamp,
+            }));
+          setAlerts(transformedAlerts);
+        } catch (err) {
+          console.warn("Failed to load alert history:", err);
+          // Don't fail the page load if we can't get history
+        } finally {
+          setAlertsLoading(false);
+        }
         
       } catch (err) {
         console.error("Load alerts page error", err);
@@ -121,46 +169,77 @@ const AlertManagementPage = () => {
   const handleCreateRule = async (e) => {
     e.preventDefault();
     
+    // Validate required fields
+    if (!form.deviceId) {
+      setToast({ open: true, message: "Vui lòng chọn thiết bị", severity: "error" });
+      return;
+    }
+    
     try {
-      console.log("Device ID: ", form.deviceId);
+      console.log("Creating rule with form data:", form);
+      
+      // Map frontend field names to backend field names
       const payload = {
-        device_id: form.deviceId ? Number(form.deviceId) : null, // deviceId -> device_id
-        metric_type: form.type,       // type -> metric_type
+        device_id: form.deviceId ? Number(form.deviceId) : null,
+        metric_type: form.type,
         condition: CONDITION_MAP[form.condition],
         threshold: Number(form.threshold),
-        severity: form.severity,      // Backend cần hỗ trợ field này hoặc bạn bỏ qua
-        is_enabled: form.active,             // Backend yêu cầu is_enabled
-        email_to: "", // làm sau
+        severity: form.severity,
+        is_enabled: true, // New rules are enabled by default
+        email_to: user?.email || "", // Auto-fill with user's email
       };
       
+      console.log("Sending payload to backend:", payload);
+      
       const created = await alertService.createRule(payload);
-      setRules((prev) => [...prev, created]);
-      setForm({ ...form, name: "" });
+      
+      // Transform response to frontend format
+      const transformedRule = {
+        ...created,
+        deviceId: created.device_id,
+        type: created.metric_type,
+        active: created.is_enabled,
+        condition: CONDITION_REVERSE_MAP[created.condition] || created.condition,
+        severity: created.severity || "medium",
+        emailTo: created.email_to || "",
+      };
+      
+      setRules((prev) => [...prev, transformedRule]);
+      
+      // Reset form
+      setForm({
+        name: "",
+        deviceId: "",
+        type: "temperature",
+        condition: ">",
+        threshold: 28,
+        severity: "medium",
+      });
       
       trackEvent("alert_rule_created", {
         id: created?.id,
-        deviceId: payload.deviceId || "all",
-        type: payload.type,
+        deviceId: payload.device_id || "all",
+        type: payload.metric_type,
         condition: payload.condition,
       });
       
-      setToast({ open: true, message: "Đã tạo rule cảnh báo", severity: "success" });
+      setToast({ open: true, message: "Đã tạo quy tắc cảnh báo", severity: "success" });
     } catch (err) {
       console.error("Create rule error", err);
-      setToast({ open: true, message: err.message || "Tạo rule thất bại", severity: "error" });
+      setToast({ open: true, message: err.message || "Tạo quy tắc thất bại", severity: "error" });
     }
   };
 
   const startEdit = (rule) => {
     setEditRuleId(rule.id);
     setEditForm({
-      name: rule.name,
-      deviceId: rule.deviceId || "",
-      type: rule.type,
-      condition: rule.condition,
+      name: rule.name || "",
+      deviceId: rule.deviceId || rule.device_id || "",
+      type: rule.type || rule.metric_type || "temperature",
+      condition: rule.condition || ">",
       threshold: rule.threshold,
-      severity: rule.severity,
-      active: rule.active !== false, // Default to true if not specified
+      severity: rule.severity || "medium",
+      active: rule.active !== false,
     });
   };
 
@@ -178,25 +257,46 @@ const AlertManagementPage = () => {
   };
 
   const saveEdit = async (id) => {
+    // Validate required fields
+    if (!editForm.deviceId) {
+      setToast({ open: true, message: "Vui lòng chọn thiết bị", severity: "error" });
+      return;
+    }
 
     try {
-      console.log("Device ID: ", editForm.deviceId);
+      console.log("Updating rule with form data:", editForm);
+      
+      // Map frontend field names to backend field names
       const payload = {
         device_id: editForm.deviceId ? Number(editForm.deviceId) : null,
         metric_type: editForm.type,
         condition: CONDITION_MAP[editForm.condition],
         threshold: Number(editForm.threshold),
         severity: editForm.severity,
-        is_enabled: editForm.active, // active -> is_enabled
-        email_to: "", // Cần xử lý nếu backend yêu cầu khi update
+        is_enabled: editForm.active,
+        email_to: user?.email || "", // Auto-fill with user's email
       };
       
+      console.log("Sending payload to backend:", payload);
+      
       const updated = await alertService.updateRule(id, payload);
-      setRules((prev) => prev.map((r) => (r.id === id ? updated : r)));
+      
+      // Transform response to frontend format
+      const transformedRule = {
+        ...updated,
+        deviceId: updated.device_id,
+        type: updated.metric_type,
+        active: updated.is_enabled,
+        condition: CONDITION_REVERSE_MAP[updated.condition] || updated.condition,
+        severity: updated.severity || "medium",
+        emailTo: updated.email_to || "",
+      };
+      
+      setRules((prev) => prev.map((r) => (r.id === id ? transformedRule : r)));
       
       trackEvent("alert_rule_updated", {
         id,
-        active: payload.active,
+        active: payload.is_enabled,
         severity: payload.severity,
       });
       
@@ -350,7 +450,8 @@ const AlertManagementPage = () => {
                     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxHeight: 500, overflowY: "auto" }}>
                       {rules.map((r) => {
                         const isEditing = editRuleId === r.id;
-                        const device = devices.find(d => d.id === r.device_id);
+                        const device = devices.find(d => d.id === (r.deviceId || r.device_id));
+                        const displayCondition = CONDITION_REVERSE_MAP[r.condition] || r.condition;
                         
                         return (
                           <Card key={r.id} variant="outlined" sx={{ 
@@ -363,7 +464,7 @@ const AlertManagementPage = () => {
                                 <Stack direction="row" spacing={1} flexWrap="wrap">
                                   <Select
                                     size="small"
-                                    value={editForm.deviceId}
+                                    value={editForm.deviceId || ""}
                                     onChange={(e) => setEditForm({ ...editForm, deviceId: e.target.value })}
                                     displayEmpty
                                     sx={{ minWidth: 150 }}
@@ -377,7 +478,7 @@ const AlertManagementPage = () => {
                                   
                                   <Select
                                     size="small"
-                                    value={editForm.type}
+                                    value={editForm.type || ""}
                                     onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}
                                     sx={{ minWidth: 120 }}
                                   >
@@ -387,7 +488,7 @@ const AlertManagementPage = () => {
                                   
                                   <Select
                                     size="small"
-                                    value={editForm.condition}
+                                    value={editForm.condition || ""}
                                     onChange={(e) => setEditForm({ ...editForm, condition: e.target.value })}
                                     sx={{ minWidth: 70 }}
                                   >
@@ -453,17 +554,22 @@ const AlertManagementPage = () => {
                                 <Stack direction="row" justifyContent="space-between" alignItems="start" mb={1}>
                                   <Box flex={1}>
                                     <Typography variant="body1" fontWeight={600}>
-                                      {r.name}
+                                      {r.name || `${r.type || r.metric_type} Alert Rule`}
                                     </Typography>
                                     <Typography variant="body2" color="text.secondary">
                                       {device ? `${device.name} (#${device.id})` : "Tất cả thiết bị"} • 
-                                      {r.type} {r.condition} {r.threshold}
+                                      {r.type || r.metric_type} {displayCondition} {r.threshold}
                                     </Typography>
+                                    {r.emailTo && (
+                                      <Typography variant="caption" color="text.secondary">
+                                        📧 {r.emailTo}
+                                      </Typography>
+                                    )}
                                   </Box>
                                   
                                   <Stack direction="row" spacing={1} alignItems="center">
                                     <Chip
-                                      label={r.severity}
+                                      label={r.severity || "medium"}
                                       color={r.severity === "high" ? "error" : r.severity === "medium" ? "warning" : "default"}
                                       size="small"
                                     />
@@ -505,9 +611,13 @@ const AlertManagementPage = () => {
               <Card>
                 <CardContent>
                   <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-                    🔔 Cảnh báo gần đây
+                    🔔 Cảnh báo gần đây ({latestAlerts.length})
                   </Typography>
-                  {latestAlerts.length === 0 ? (
+                  {alertsLoading ? (
+                    <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+                      <CircularProgress />
+                    </Box>
+                  ) : latestAlerts.length === 0 ? (
                     <Box sx={{ textAlign: "center", py: 4 }}>
                       <Typography color="text.secondary">
                         Chưa có cảnh báo nào.
@@ -515,30 +625,35 @@ const AlertManagementPage = () => {
                     </Box>
                   ) : (
                     <Stack spacing={1}>
-                      {latestAlerts.map((a) => (
-                        <Card key={a.id} variant="outlined">
-                          <CardContent sx={{ py: 1.5 }}>
-                            <Stack direction="row" justifyContent="space-between" alignItems="center">
-                              <Box flex={1}>
-                                <Typography fontWeight={600}>
-                                  {a.message || `${a.type} alert`}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                  Device #{a.deviceId} • {a.type} = {a.value}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  {a.timestamp ? new Date(a.timestamp).toLocaleString() : ""}
-                                </Typography>
-                              </Box>
-                              <Chip
-                                label={a.severity}
-                                color={a.severity === "high" ? "error" : a.severity === "medium" ? "warning" : "default"}
-                                size="small"
-                              />
-                            </Stack>
-                          </CardContent>
-                        </Card>
-                      ))}
+                      {latestAlerts.map((a) => {
+                        const device = devices.find(d => d.id === a.deviceId);
+                        return (
+                          <Card key={a.id} variant="outlined">
+                            <CardContent sx={{ py: 1.5 }}>
+                              <Stack direction="row" justifyContent="space-between" alignItems="start" gap={1}>
+                                <Box flex={1}>
+                                  <Typography fontWeight={600}>
+                                    {a.message || `${a.type || 'Alert'}`}
+                                  </Typography>
+                                  <Typography variant="body2" color="text.secondary">
+                                    {device ? device.name : `Device #${a.deviceId}`} • {a.type || 'Unknown'} {a.value ? `= ${a.value}` : ''}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {a.timestamp ? new Date(a.timestamp).toLocaleString('vi-VN') : ""}
+                                  </Typography>
+                                </Box>
+                                {a.severity && (
+                                  <Chip
+                                    label={a.severity}
+                                    color={a.severity === "high" ? "error" : a.severity === "medium" ? "warning" : "default"}
+                                    size="small"
+                                  />
+                                )}
+                              </Stack>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
                     </Stack>
                   )}
                 </CardContent>

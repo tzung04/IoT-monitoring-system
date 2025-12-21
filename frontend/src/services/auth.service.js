@@ -73,6 +73,18 @@ export const resetPassword = async (email, code, newPassword) => {
   }
 };
 
+export const logout = async () => {
+  try {
+    // Gọi API logout để backend xóa session/token nếu cần
+    const resp = await api.post(`${BASE}/logout`);
+    return resp.data;
+  } catch (err) {
+    console.error("Logout error", err);
+    // Logout vẫn thành công ngay cả khi API fail
+    throw err;
+  }
+};
+
 export default {
   login,
   register,
@@ -80,4 +92,5 @@ export default {
   changePassword,
   forgotPassword,
   resetPassword,
+  logout,
 };
