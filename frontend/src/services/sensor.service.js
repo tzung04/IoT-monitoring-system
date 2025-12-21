@@ -130,8 +130,8 @@ export const getAlertHistory = async (deviceId = null, fromDate = null, toDate =
     if (fromDate) params.from = fromDate;
     if (toDate) params.to = toDate;
 
-    console.log(`Calling GET /history/alerts with params:`, params);
-    const resp = await api.get(`${HISTORY_BASE}/alerts`, { params });
+    console.log(`Calling GET /history/alerts-device with params:`, params);
+    const resp = await api.get(`${HISTORY_BASE}/alerts-device`, { params });
     console.log("getAlertHistory response:", resp.data);
 
     if (!resp.data) {
@@ -154,9 +154,39 @@ export const getAlertHistory = async (deviceId = null, fromDate = null, toDate =
   }
 };
 
+export const getAllAlertHistory = async () => {
+  try {
+    
+
+    console.log(`Calling GET /history/alerts-user`);
+    const resp = await api.get(`${HISTORY_BASE}/alerts-device`);
+    console.log("getAllAlertHistory response:", resp.data);
+
+    if (!resp.data) {
+      throw new Error("Invalid response from server: missing data");
+    }
+
+    // Ensure it's an array
+    return Array.isArray(resp.data) ? resp.data : [];
+  } catch (err) {
+    const errorMsg =
+      err.response?.data?.message ||
+      err.message ||
+      "Failed to fetch alert history";
+    console.error("getAllAlertHistory error:", {
+      status: err.response?.status,
+      data: err.response?.data,
+      message: errorMsg,
+    });
+    throw new Error(errorMsg);
+  }
+};
+
+
 export default {
   getDeviceData,
   getLatestData,
   getSensorHistory,
   getAlertHistory,
+  getAllAlertHistory
 };

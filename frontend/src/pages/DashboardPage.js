@@ -68,7 +68,7 @@ const DashboardPage = () => {
       try {
         const [deviceList, alertHistory, dashboardData] = await Promise.all([
           deviceService.getDevices(),
-          sensorService.getAlertHistory(),
+          sensorService.getAllAlertHistory(),
           dashboardService.getDashboardUrl(),
         ]);
         
@@ -88,6 +88,17 @@ const DashboardPage = () => {
       }
     };
     load();
+    
+    // Auto-refresh mỗi 60 giây
+    const interval = setInterval(() => {
+      deviceService.getDevices().then(deviceList => {
+        setDevices(Array.isArray(deviceList) ? deviceList : []);
+      }).catch(err => {
+        console.error("Auto-refresh error:", err);
+      });
+    }, 60000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   useSocket((message) => {
@@ -133,8 +144,9 @@ const DashboardPage = () => {
 
   const stats = useMemo(() => {
     const total = devices.length;
-    const online = devices.filter((d) => (d.status || "").toLowerCase() === "online").length;
-    const offline = total - online;
+    const online = devices.filter((d) => d.status === "online").length;
+    const offline = devices.filter((d) => d.status === "offline").length;
+    const inactive = devices.filter((d) => d.status === "inactive").length;
     const recentAlerts = alerts.filter((a) => {
       if (!a.timestamp) return false;
       const alertTime = new Date(a.timestamp).getTime();
@@ -142,7 +154,7 @@ const DashboardPage = () => {
       return alertTime > oneDayAgo;
     }).length;
     
-    return { total, online, offline, recentAlerts };
+    return { total, online, offline, inactive, recentAlerts };
   }, [devices, alerts]);
 
   const recentAlerts = useMemo(() => alerts.slice(0, 5), [alerts]);
@@ -156,7 +168,8 @@ const DashboardPage = () => {
   const statCards = [
     { label: "Tổng thiết bị", value: stats.total, icon: <DeviceHubIcon color="primary" /> },
     { label: "Online", value: stats.online, icon: <OnlinePredictionIcon color="success" /> },
-    { label: "Offline", value: stats.offline, icon: <OnlinePredictionIcon color="disabled" /> },
+    { label: "Offline", value: stats.offline, icon: <OnlinePredictionIcon color="error" /> },
+    { label: "Inactive", value: stats.inactive, icon: <OnlinePredictionIcon sx={{ color: '#9e9e9e' }} /> },
     { label: "Alerts (24h)", value: stats.recentAlerts, icon: <WarningAmberIcon color="warning" /> },
   ];
 
@@ -169,7 +182,7 @@ const DashboardPage = () => {
       {/* Stats Cards */}
       <Grid container spacing={2}>
         {statCards.map((card) => (
-          <Grid item xs={12} sm={6} md={3} key={card.label}>
+          <Grid item xs={12} sm={6} md={2.4} key={card.label}>
             <Card>
               <CardContent>
                 <Stack direction="row" spacing={2} alignItems="center">

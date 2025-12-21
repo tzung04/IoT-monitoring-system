@@ -69,7 +69,48 @@ export const getAllUserDevices = async (req, res) => {
 
     try {
         const devices = await Device.findByUserId(userId);
-        res.json(devices);
+        
+        // Import querySensorData để tính status
+        const { querySensorData } = await import('../config/influxdb.js');
+        
+        // Tính status cho từng device
+        const devicesWithStatus = await Promise.all(
+            devices.map(async (device) => {
+                try {
+                    // Query latest data (1 hour)
+                    const data = await querySensorData(device.name, userId, 1);
+                    const latest = data.length > 0 ? data[data.length - 1] : null;
+                    
+                    // Xác định status
+                    let status = 'inactive';
+                    if (device.is_active) {
+                        if (!latest) {
+                            status = 'offline';
+                        } else {
+                            const lastDataTime = new Date(latest.time);
+                            const now = new Date();
+                            const diffMinutes = (now - lastDataTime) / 1000 / 60;
+                            status = diffMinutes > 2 ? 'offline' : 'online';
+                        }
+                    }
+                    
+                    return {
+                        ...device,
+                        status,
+                        lastSeen: latest ? latest.time : null
+                    };
+                } catch (err) {
+                    console.error(`Error getting status for device ${device.id}:`, err);
+                    return {
+                        ...device,
+                        status: 'error',
+                        lastSeen: null
+                    };
+                }
+            })
+        );
+        
+        res.json(devicesWithStatus);
     } catch (err) {
         console.error('Error getting user devices:', err);
         res.status(500).json({ error: 'Lỗi máy chủ khi lấy danh sách thiết bị.' });
