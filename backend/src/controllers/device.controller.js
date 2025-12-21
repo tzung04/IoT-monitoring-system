@@ -1,5 +1,7 @@
 import Device from '../models/device.model.js'; 
 import crypto from 'crypto';
+import { clearDeviceCache } from '../middleware/grafanaVerify.middleware.js';
+
 
 // Helper function: Logic kiểm tra quyền sở hữu thiết bị
 // Vì Model findById chỉ lấy theo ID, ta cần check thêm user_id ở controller
@@ -43,6 +45,7 @@ export const createDevice = async (req, res) => {
             is_active: false
         });
 
+        clearDeviceCache(userId);
         res.status(201).json(newDevice);
     } catch (err) {
         console.error('Error creating device:', err);
@@ -117,6 +120,7 @@ export const updateDevice = async (req, res) => {
             is_active
         });
 
+        clearDeviceCache(userId);
         res.json(updatedDevice);
     } catch (err) {
         console.error('Error updating device:', err);
@@ -139,6 +143,7 @@ export const deleteDevice = async (req, res) => {
         // 2. Gọi Model delete
         await Device.delete(deviceId);
 
+        clearDeviceCache(userId);
         res.status(200).json({ message: 'Thiết bị và dữ liệu liên quan đã được xóa thành công.' });
     } catch (err) {
         console.error('Error deleting device:', err);

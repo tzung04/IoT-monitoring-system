@@ -16,30 +16,34 @@ export const handlerGetDashboardUrl = async (req, res) => {
       });
     }
     
-    // Lấy device serials
+    // Lấy device SERIALS để tạo hash
     const deviceSerials = devices.map(d => d.device_serial).join(',');
     
-    // Generate signed hash
+    // Generate signed hash 
     const { hash, exp } = generateDashboardHash(userId, deviceSerials);
     
     // Build URL params
     const dashboardUid = process.env.GRAFANA_DASHBOARD_UID;
-    const backendUrl = process.env.BACKEND_URL;
+    const backendUrl = process.env.BACKEND_URL || '';
     
-    const params = new URLSearchParams({
-      orgId: '1',
-      'var-user_id': userId,
-      'var-devices': deviceSerials,
-      theme: 'light',
-      kiosk: 'tv',
-      from: 'now-24h',
-      to: 'now',
-      refresh: '5s',
-      hash: hash,
-      exp: exp
+    const params = new URLSearchParams();
+    params.append('orgId', '1');
+    params.append('var-user_id', userId);
+    
+    // Append từng device name riêng lẻ
+    devices.forEach(device => {
+      params.append('var-devices', device.name);
     });
     
-    // Trả về relative path để đi qua backend proxy
+    params.append('theme', 'light');
+    params.append('kiosk', 'tv');
+    params.append('from', 'now-24h');
+    params.append('to', 'now');
+    params.append('refresh', '5s');
+    params.append('hash', hash);  // Hash từ serials
+    params.append('exp', exp);
+    
+    // Trả về URL để đi qua backend proxy
     const embedUrl = `${backendUrl}/grafana/d/${dashboardUid}/iot-monitoring?${params.toString()}`;
     
     return res.json({
@@ -73,21 +77,21 @@ export const handlerGetPanelUrl = async (req, res) => {
     const { hash, exp } = generateDashboardHash(userId, device.device_serial);
     
     const dashboardUid = process.env.GRAFANA_DASHBOARD_UID;
-    const backendUrl = process.env.BACKEND_URL;
-
+    const backendUrl = process.env.BACKEND_URL || '';
+    
     const params = new URLSearchParams({
       orgId: '1',
       'var-user_id': userId,
-      'var-device': device.device_serial,
+      'var-device': device.name,  
       theme: 'light',
       panelId: panelId || '2',
       from: `now-${timeRange || '24h'}`,
       to: 'now',
-      hash: hash,
+      hash: hash,  // Hash từ serial
       exp: exp
     });
     
-    // Relative path cho single panel
+    // URL cho single panel
     const embedUrl = `${backendUrl}/grafana/d-solo/${dashboardUid}/iot-monitoring?${params.toString()}`;
     
     return res.json({
