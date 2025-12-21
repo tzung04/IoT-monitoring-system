@@ -16,6 +16,7 @@ import grafanaRoutes from './routes/grafana.routes.js'
 import dataRoutes from './routes/data.routes.js';
 import alertRoutes from './routes/alert.routes.js';
 import historyRoutes from './routes/history.routes.js';
+import placeRoutes from './routes/place.routes.js';
 
 dotenv.config();
 const app = express();
@@ -53,6 +54,7 @@ app.use('/grafana', grafanaRoutes);
 app.use('/api/data', dataRoutes);
 app.use('/api/alert', alertRoutes);
 app.use('/api/history', historyRoutes);
+app.use('/api/places', placeRoutes);
 
 // 404 handler
 app.use((req, res) => {
