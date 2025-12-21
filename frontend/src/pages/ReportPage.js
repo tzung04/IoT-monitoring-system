@@ -7,232 +7,368 @@ import {
   Grid,
   Stack,
   Button,
-  Select,
-  MenuItem,
-  TextField,
-  Switch,
   Chip,
   Snackbar,
   Alert,
+  CircularProgress,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/Download";
-import ScheduleIcon from "@mui/icons-material/Schedule";
-import AssessmentIcon from "@mui/icons-material/Assessment";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import HistoricalChart from "../components/Charts/HistoricalChart";
-import reportService from "../services/report.service";
+import deviceService from "../services/device.service";
+import sensorService from "../services/sensor.service";
+import { trackEvent } from "../observability/faro";
 
 const ReportPage = () => {
-  const [summary, setSummary] = useState(null);
-  const [schedule, setSchedule] = useState({ enabled: false, frequency: "daily", recipients: "" });
+  const [devices, setDevices] = useState([]);
+  const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [toast, setToast] = useState({ open: false, message: "", severity: "info" });
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      const [sum, sched] = await Promise.all([reportService.getSummary(), reportService.getSchedule()]);
-      setSummary(sum);
-      setSchedule({
-        enabled: sched?.enabled || false,
-        frequency: sched?.frequency || "daily",
-        recipients: Array.isArray(sched?.recipients) ? sched.recipients.join(", ") : sched?.recipients || "",
-      });
-      setLoading(false);
-    };
-    load();
+    loadData();
   }, []);
 
-  const alertTrendSeries = useMemo(() => {
-    if (!summary?.trend) return [];
-    return summary.trend.map((t) => ({ label: t.label, count: t.count }));
-  }, [summary]);
-
-  const saveSchedule = async () => {
+  const loadData = async () => {
     try {
-      setSaving(true);
-      const payload = {
-        enabled: schedule.enabled,
-        frequency: schedule.frequency,
-        recipients: schedule.recipients
-          .split(",")
-          .map((v) => v.trim())
-          .filter(Boolean),
-      };
-      const saved = await reportService.saveSchedule(payload);
-      setSchedule({
-        enabled: saved?.enabled || false,
-        frequency: saved?.frequency || "daily",
-        recipients: Array.isArray(saved?.recipients) ? saved.recipients.join(", ") : saved?.recipients || "",
-      });
-      setToast({ open: true, message: "Đã lưu lịch báo cáo", severity: "success" });
+      setLoading(true);
+      const [deviceList, alertHistory] = await Promise.all([
+        deviceService.getDevices(),
+        sensorService.getAlertHistory(),
+      ]);
+      
+      setDevices(deviceList || []);
+      setAlerts(alertHistory || []);
+      trackEvent("report_page_loaded", { deviceCount: deviceList?.length, alertCount: alertHistory?.length });
     } catch (err) {
-      console.error("save schedule error", err);
-      setToast({ open: true, message: "Lưu lịch báo cáo thất bại", severity: "error" });
+      console.error("Load report data error:", err);
+      setToast({ open: true, message: "Không thể tải dữ liệu báo cáo", severity: "error" });
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
   };
 
-  const downloadFile = (fileName, mimeType, base64Content) => {
+
+  const downloadFile = (fileName, content, mimeType) => {
     try {
+      const blob = new Blob([content], { type: mimeType });
       const link = document.createElement("a");
-      link.href = `data:${mimeType};base64,${base64Content}`;
+      link.href = URL.createObjectURL(blob);
       link.download = fileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
     } catch (err) {
       console.error("download file error", err);
     }
   };
 
-  const exportReport = async (format) => {
+  const exportReport = () => {
     try {
-      const resp = await reportService.exportReport(format);
-      if (resp?.content && resp?.fileName) {
-        downloadFile(resp.fileName, resp.mimeType || "application/octet-stream", resp.content);
-        setToast({ open: true, message: `Đã export ${format.toUpperCase()}`, severity: "success" });
-      } else {
-        setToast({ open: true, message: "Không có dữ liệu export", severity: "warning" });
-      }
+      setExporting(true);
+      const content = `BÁO CÁO HỆ THỐNG IOT
+Ngày: ${new Date().toLocaleString("vi-VN")}
+
+THỐNG KÊ THIẾT BỊ
+- Tổng thiết bị: ${deviceStats.total}
+- Online: ${deviceStats.online}
+- Offline: ${deviceStats.offline}
+
+THỐNG KÊ CẢNH BÁO
+- Tổng cảnh báo: ${alertStats.total}
+- Cao: ${alertStats.high}
+- Trung bình: ${alertStats.medium}
+- Thấp: ${alertStats.low}
+
+CHI TIẾT CẢNH BÁO (${alerts.length} cảnh báo)
+${alerts.map((a, idx) => `${idx + 1}. ${a.device_id} - ${a.severity?.toUpperCase() || "UNKNOWN"} - ${new Date(a.triggered_at || a.timestamp).toLocaleString("vi-VN")}`).join("\n")}
+
+DANH SÁCH THIẾT BỊ (${devices.length} thiết bị)
+${devices.map((d) => `- ${d.name} (ID: ${d.id}, Status: ${d.is_active ? "Online" : "Offline"})`).join("\n")}`;
+      
+      const fileName = `report_${new Date().toISOString().split("T")[0]}.txt`;
+      downloadFile(fileName, content, "text/plain");
+      trackEvent("report_exported", { format: "txt" });
+      setToast({ open: true, message: "Đã tải xuống báo cáo", severity: "success" });
     } catch (err) {
       console.error("export report error", err);
       setToast({ open: true, message: "Export thất bại", severity: "error" });
+    } finally {
+      setExporting(false);
     }
   };
 
-  if (loading) return <div style={{ padding: 20 }}>Đang tải báo cáo...</div>;
+  const handleRefresh = () => {
+    loadData();
+    setToast({ open: true, message: "Đã làm mới báo cáo", severity: "success" });
+  };
+
+  // Calculate statistics from loaded data
+  const deviceStats = useMemo(() => {
+    const total = devices.length;
+    const online = devices.filter((d) => d.is_active).length;
+    const offline = total - online;
+    return { total, online, offline };
+  }, [devices]);
+
+  const alertStats = useMemo(() => {
+    const total = alerts.length;
+    const high = alerts.filter((a) => a.severity === "high").length;
+    const medium = alerts.filter((a) => a.severity === "medium").length;
+    const low = alerts.filter((a) => a.severity === "low").length;
+    return { total, high, medium, low };
+  }, [alerts]);
+
+  const alertTrend = useMemo(() => {
+    if (alerts.length === 0) return [];
+    
+    // Group alerts by date
+    const grouped = {};
+    alerts.forEach((alert) => {
+      const date = new Date(alert.triggered_at || alert.timestamp).toLocaleDateString("vi-VN");
+      grouped[date] = (grouped[date] || 0) + 1;
+    });
+    
+    return Object.entries(grouped)
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => new Date(a.label) - new Date(b.label))
+      .slice(-7); // Last 7 days
+  }, [alerts]);
+
+  if (loading) {
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", py: 8 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      <Typography variant="h5" gutterBottom>
-        Báo cáo & Export
-      </Typography>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2, p: 2 }}>
+      {/* Header */}
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
+            📊 Báo cáo & Xuất dữ liệu
+          </Typography>
+          <Typography variant="body2" color="textSecondary">
+            Xem tóm tắt hệ thống và lên lịch gửi báo cáo tự động
+          </Typography>
+        </Box>
+        <Button
+          variant="outlined"
+          startIcon={<RefreshIcon />}
+          onClick={handleRefresh}
+          disabled={loading}
+        >
+          Làm mới
+        </Button>
+      </Box>
 
+      {/* Summary Statistics */}
       <Grid container spacing={2}>
-        <Grid item xs={12} md={4}>
+        {/* Device Statistics */}
+        <Grid item xs={12} sm={6} md={3}>
           <Card>
-            <CardContent>
-              <Stack direction="row" alignItems="center" spacing={1} mb={1}>
-                <AssessmentIcon color="primary" />
-                <Typography variant="subtitle1">Tóm tắt</Typography>
-              </Stack>
-              <Stack spacing={1}>
-                <Stack direction="row" justifyContent="space-between">
-                  <Typography variant="body2">Tổng thiết bị</Typography>
-                  <Typography fontWeight={600}>{summary?.devices?.total ?? "-"}</Typography>
-                </Stack>
-                <Stack direction="row" justifyContent="space-between">
-                  <Typography variant="body2">Online</Typography>
-                  <Typography fontWeight={600}>{summary?.devices?.online ?? "-"}</Typography>
-                </Stack>
-                <Stack direction="row" justifyContent="space-between">
-                  <Typography variant="body2">Offline</Typography>
-                  <Typography fontWeight={600}>{summary?.devices?.offline ?? "-"}</Typography>
-                </Stack>
-                <Stack direction="row" justifyContent="space-between">
-                  <Typography variant="body2">Alerts</Typography>
-                  <Typography fontWeight={600}>{summary?.alerts?.total ?? "-"}</Typography>
-                </Stack>
-                <Stack direction="row" spacing={1}>
-                  <Chip size="small" label={`High: ${summary?.alerts?.high ?? 0}`} color="error" />
-                  <Chip size="small" label={`Medium: ${summary?.alerts?.medium ?? 0}`} color="warning" />
-                  <Chip size="small" label={`Low: ${summary?.alerts?.low ?? 0}`} />
-                </Stack>
-              </Stack>
+            <CardContent sx={{ textAlign: "center" }}>
+              <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
+                📱 Tổng thiết bị
+              </Typography>
+              <Typography variant="h4" sx={{ fontWeight: 700, color: "primary.main" }}>
+                {deviceStats.total}
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={8}>
+        <Grid item xs={12} sm={6} md={3}>
           <Card>
-            <CardContent>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-                <Typography variant="subtitle1">Biểu đồ alert theo thời gian</Typography>
-                <ScheduleIcon fontSize="small" />
-              </Stack>
-              <HistoricalChart
-                data={alertTrendSeries}
-                xKey="label"
-                series={[{ dataKey: "count", name: "Alerts", color: "#ef5350" }]}
-                stacked={false}
-              />
+            <CardContent sx={{ textAlign: "center" }}>
+              <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
+                🟢 Online
+              </Typography>
+              <Typography variant="h4" sx={{ fontWeight: 700, color: "success.main" }}>
+                {deviceStats.online}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Card>
+            <CardContent sx={{ textAlign: "center" }}>
+              <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
+                🔴 Offline
+              </Typography>
+              <Typography variant="h4" sx={{ fontWeight: 700, color: "error.main" }}>
+                {deviceStats.offline}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Card>
+            <CardContent sx={{ textAlign: "center" }}>
+              <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
+                🚨 Tổng cảnh báo
+              </Typography>
+              <Typography variant="h4" sx={{ fontWeight: 700, color: "warning.main" }}>
+                {alertStats.total}
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
+      {/* Alert Severity Statistics */}
+      <Grid container spacing={2}>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+                🚨 Phân loại cảnh báo
+              </Typography>
+              <Stack spacing={2}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="body2">🔴 High (Cao)</Typography>
+                  <Chip
+                    label={alertStats.high}
+                    color="error"
+                    size="small"
+                    sx={{ fontWeight: 600 }}
+                  />
+                </Stack>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="body2">🟡 Medium (Trung bình)</Typography>
+                  <Chip
+                    label={alertStats.medium}
+                    color="warning"
+                    size="small"
+                    sx={{ fontWeight: 600 }}
+                  />
+                </Stack>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="body2">🟢 Low (Thấp)</Typography>
+                  <Chip
+                    label={alertStats.low}
+                    color="success"
+                    size="small"
+                    sx={{ fontWeight: 600 }}
+                  />
+                </Stack>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Alert Trend Chart */}
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+                📈 Xu hướng cảnh báo (7 ngày gần đây)
+              </Typography>
+              {alertTrend && alertTrend.length > 0 ? (
+                <HistoricalChart
+                  data={alertTrend}
+                  xKey="label"
+                  series={[{ dataKey: "count", name: "Cảnh báo", color: "#ef5350" }]}
+                  stacked={false}
+                  height={250}
+                />
+              ) : (
+                <Box sx={{ textAlign: "center", py: 4 }}>
+                  <Typography color="textSecondary">Không có dữ liệu xu hướng</Typography>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Detailed Statistics Table */}
+      {devices && devices.length > 0 && (
+        <Card>
+          <CardContent>
+            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+              📋 Danh sách thiết bị
+            </Typography>
+            <TableContainer>
+              <Table>
+                <TableHead sx={{ backgroundColor: "#f5f5f5" }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600 }}>ID</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Tên thiết bị</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>MAC Address</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Trạng thái</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {devices.map((device) => (
+                    <TableRow key={device.id} sx={{ "&:hover": { backgroundColor: "#fafafa" } }}>
+                      <TableCell>{device.id}</TableCell>
+                      <TableCell>{device.name}</TableCell>
+                      <TableCell sx={{ fontSize: "0.875rem" }}>{device.mac_address || "N/A"}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={device.is_active ? "🟢 Online" : "🔴 Offline"}
+                          color={device.is_active ? "success" : "error"}
+                          size="small"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Export Options */}
       <Card>
         <CardContent>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center" mb={2}>
-            <Typography variant="subtitle1" sx={{ flex: 1 }}>
-              Lịch gửi báo cáo tự động
-            </Typography>
-            <Switch
-              checked={schedule.enabled}
-              onChange={(e) => setSchedule((prev) => ({ ...prev, enabled: e.target.checked }))}
-            />
-            <Select
-              size="small"
-              value={schedule.frequency}
-              onChange={(e) => setSchedule((prev) => ({ ...prev, frequency: e.target.value }))}
-            >
-              <MenuItem value="daily">Hàng ngày</MenuItem>
-              <MenuItem value="weekly">Hàng tuần</MenuItem>
-            </Select>
-            <TextField
-              size="small"
-              label="Recipients"
-              placeholder="email1@example.com, email2@example.com"
-              value={schedule.recipients}
-              onChange={(e) => setSchedule((prev) => ({ ...prev, recipients: e.target.value }))}
-              sx={{ minWidth: 260 }}
-            />
-            <Button variant="contained" onClick={saveSchedule} disabled={saving}>
-              {saving ? "Đang lưu..." : "Lưu"}
-            </Button>
-          </Stack>
-          <Typography variant="body2" color="text.secondary">
-            Lịch gửi chỉ mock trên client; backend thực tế cần cron/email service.
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+            📥 Xuất báo cáo
           </Typography>
+          <Stack spacing={2}>
+            <Button
+              variant="contained"
+              startIcon={<DownloadIcon />}
+              onClick={exportReport}
+              disabled={exporting}
+              sx={{ alignSelf: "flex-start" }}
+            >
+              {exporting ? "Đang xuất..." : "Tải xuống báo cáo (TXT)"}
+            </Button>
+            <Typography variant="caption" color="textSecondary">
+              💾 Tải xuống toàn bộ thông tin hệ thống dưới dạng tệp TXT (thống kê, cảnh báo, danh sách thiết bị).
+            </Typography>
+          </Stack>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardContent>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center" mb={1}>
-            <Typography variant="subtitle1" sx={{ flex: 1 }}>
-              Export thủ công
-            </Typography>
-            <Button
-              variant="outlined"
-              startIcon={<DownloadIcon />}
-              onClick={() => exportReport("csv")}
-            >
-              CSV
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<DownloadIcon />}
-              onClick={() => exportReport("pdf")}
-            >
-              PDF
-            </Button>
-          </Stack>
-          <Typography variant="body2" color="text.secondary">
-            Export dùng dữ liệu tóm tắt hiện tại, trả về file CSV hoặc PDF mock.
-          </Typography>
-        </CardContent>
-      </Card>
-
+      {/* Snackbar */}
       <Snackbar
         open={toast.open}
-        autoHideDuration={3000}
+        autoHideDuration={4000}
         onClose={() => setToast({ ...toast, open: false })}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
-        <Alert severity={toast.severity} onClose={() => setToast({ ...toast, open: false })} sx={{ width: "100%" }}>
+        <Alert
+          severity={toast.severity}
+          onClose={() => setToast({ ...toast, open: false })}
+          sx={{ width: "100%" }}
+        >
           {toast.message}
         </Alert>
       </Snackbar>
