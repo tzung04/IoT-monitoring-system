@@ -1,19 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Grid,
-  Stack,
-  Chip,
-  Avatar,
-  List,
-  ListItem,
-  ListItemText,
-  Divider,
-  CircularProgress,
-  Alert,
+  Box, Card, CardContent, Typography, Grid, Stack, Chip, Avatar,
+  ListItem, ListItemText, CircularProgress, Alert, Skeleton, Divider
 } from "@mui/material";
 import DeviceHubIcon from "@mui/icons-material/DeviceHub";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
@@ -21,8 +9,7 @@ import OnlinePredictionIcon from "@mui/icons-material/OnlinePrediction";
 import TimelineIcon from "@mui/icons-material/Timeline";
 import deviceService from "../services/device.service";
 import dashboardService from "../services/dashboard.service";
-import * as sensorService from "../services/sensor.service"
-
+import * as sensorService from "../services/sensor.service";
 
 const DashboardPage = () => {
   const [devices, setDevices] = useState([]);
@@ -31,28 +18,8 @@ const DashboardPage = () => {
   const [grafanaUrl, setGrafanaUrl] = useState("");
   const [grafanaError, setGrafanaError] = useState(null);
 
-  const normalizeAlerts = (list, limit = 50) => {
-    const seen = new Set();
-    const sorted = [...list].sort(
-      (a, b) => new Date(b.triggered_at || 0).getTime() - new Date(a.triggered_at || 0).getTime()
-    );
-    const uniq = [];
-    sorted.forEach((item) => {
-      const key = item.id || `${item.type}-${item.triggered_at}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        uniq.push({
-          ...item,
-          severity: item.rule_severity || "medium"
-        });
-      }
-    });
-    return uniq.slice(0, limit);
-  };
-
   useEffect(() => {
     const load = async () => {
-      setLoading(true);
       try {
         const [deviceList, alertHistory, dashboardData] = await Promise.all([
           deviceService.getDevices(),
@@ -62,91 +29,59 @@ const DashboardPage = () => {
         
         setDevices(Array.isArray(deviceList) ? deviceList : []);
         setAlerts(normalizeAlerts(Array.isArray(alertHistory) ? alertHistory : []));
-        
-        if (dashboardData && dashboardData.embedUrl) {
-          setGrafanaUrl(dashboardData.embedUrl);
-        } else {
-          setGrafanaError("Chưa có thiết bị để hiển thị!");
-        }
+        if (dashboardData?.embedUrl) setGrafanaUrl(dashboardData.embedUrl);
+        else setGrafanaError("Chưa có cấu hình dashboard!");
       } catch (err) {
-        console.error("Load dashboard error:", err);
-        setGrafanaError(err.message || "Lỗi khi tải dashboard");
+        setGrafanaError(err.message || "Lỗi khi kết nối hệ thống");
       } finally {
         setLoading(false);
       }
     };
     load();
-    
-    // Auto-refresh mỗi 60 giây
-    const interval = setInterval(() => {
-      deviceService.getDevices().then(deviceList => {
-        setDevices(Array.isArray(deviceList) ? deviceList : []);
-      }).catch(err => {
-        console.error("Auto-refresh error:", err);
-      });
-      
-      sensorService.getAllAlertHistory().then(alertHistory => {
-        setAlerts(normalizeAlerts(Array.isArray(alertHistory) ? alertHistory : []));
-      }).catch(err => {
-        console.error("Alert refresh error:", err);
-      });
-    }, 60000);
-    
+    const interval = setInterval(load, 60000);
     return () => clearInterval(interval);
   }, []);
+
+  const normalizeAlerts = (list) => {
+    return [...list].sort((a, b) => 
+      new Date(b.triggered_at || b.timestamp).getTime() - new Date(a.triggered_at || a.timestamp).getTime()
+    ).slice(0, 10);
+  };
 
   const stats = useMemo(() => {
     const total = devices.length;
     const online = devices.filter((d) => d.status === "online").length;
     const offline = devices.filter((d) => d.status === "offline").length;
     const inactive = devices.filter((d) => d.status === "inactive").length;
-    
-    const recentAlerts = alerts.filter((a) => {
-      const timestamp = a.triggered_at || a.timestamp;
-      if (!timestamp) return false;
-      const alertTime = new Date(timestamp).getTime();
-      const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-      return alertTime > oneDayAgo;
-    }).length;
-    
-    return { total, online, offline, inactive, recentAlerts };
+    const recentAlertsCount = alerts.filter(a => 
+      new Date(a.triggered_at || a.timestamp).getTime() > Date.now() - 86400000
+    ).length;
+    return { total, online, offline, inactive, recentAlertsCount };
   }, [devices, alerts]);
 
-  const recentAlerts = useMemo(() => alerts.slice(0, 5), [alerts]);
-
-  const statusChip = (severity) => {
-    if (severity === "high") return { color: "error", label: "High" };
-    if (severity === "medium") return { color: "warning", label: "Medium" };
-    return { color: "default", label: "Low" };
-  };
-
   const statCards = [
-    { label: "Tổng thiết bị", value: stats.total, icon: <DeviceHubIcon color="primary" /> },
-    { label: "Online", value: stats.online, icon: <OnlinePredictionIcon color="success" /> },
-    { label: "Offline", value: stats.offline, icon: <OnlinePredictionIcon color="error" /> },
-    { label: "Inactive", value: stats.inactive, icon: <OnlinePredictionIcon sx={{ color: '#9e9e9e' }} /> },
-    { label: "Alerts (24h)", value: stats.recentAlerts, icon: <WarningAmberIcon color="warning" /> },
+    { label: "Tổng thiết bị", value: stats.total, icon: <DeviceHubIcon />, color: "#1976d2" },
+    { label: "Online", value: stats.online, icon: <OnlinePredictionIcon />, color: "#2e7d32" },
+    { label: "Offline", value: stats.offline, icon: <OnlinePredictionIcon />, color: "#d32f2f" },
+    { label: "Inactive", value: stats.inactive, icon: <OnlinePredictionIcon />, color: "#9e9e9e" },
+    { label: "Cảnh báo (24h)", value: stats.recentAlertsCount, icon: <WarningAmberIcon />, color: "#ed6c02" },
   ];
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      <Typography variant="h5" gutterBottom>
-        Dashboard
-      </Typography>
+    <Box sx={{ p: { xs: 1, md: 3 }, display: "flex", flexDirection: "column", gap: 3 }}>
+      <Typography variant="h4" sx={{ fontWeight: 800 }}>Dashboard</Typography>
 
-      {/* Stats Cards */}
+      {/* 1. Stats Cards - 5 Cột cân đối */}
       <Grid container spacing={2}>
         {statCards.map((card) => (
           <Grid item xs={12} sm={6} md={2.4} key={card.label}>
-            <Card>
+            <Card sx={{ borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
               <CardContent>
                 <Stack direction="row" spacing={2} alignItems="center">
-                  <Avatar sx={{ bgcolor: "#e3f2fd", color: "#1976d2" }}>{card.icon}</Avatar>
+                  <Avatar sx={{ bgcolor: `${card.color}15`, color: card.color }}>{card.icon}</Avatar>
                   <Box>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      {card.label}
-                    </Typography>
-                    <Typography variant="h5">{loading ? "…" : card.value}</Typography>
+                    <Typography variant="caption" color="text.secondary" fontWeight={700}>{card.label}</Typography>
+                    <Typography variant="h5" fontWeight={800}>{loading ? <Skeleton width={40} /> : card.value}</Typography>
                   </Box>
                 </Stack>
               </CardContent>
@@ -155,102 +90,68 @@ const DashboardPage = () => {
         ))}
       </Grid>
 
-      {/* Grafana Dashboard */}
-      <Card>
-        <CardContent>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <TimelineIcon color="primary" />
-              <Typography variant="h6">Sensor Data Visualization</Typography>
-            </Stack>
-            <Chip 
-              label="Powered by Grafana" 
-              size="small" 
-              variant="outlined" 
-              color="primary"
-            />
+      {/* 2. Grafana Dashboard - FULL WIDTH */}
+      <Card sx={{ borderRadius: 3, overflow: "hidden" }}>
+        <Box sx={{ p: 2, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <TimelineIcon color="primary" />
+            <Typography variant="h6" fontWeight={700}>Sensor Data Visualization</Typography>
           </Stack>
-
+          <Chip label="LIVE" size="small" color="error" variant="outlined" sx={{ fontWeight: 800 }} />
+        </Box>
+        <Divider />
+        <CardContent sx={{ p: 0 }}>
           {loading ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
-              <CircularProgress />
-            </Box>
+            <Box sx={{ height: 600, display: "flex", justifyContent: "center", alignItems: "center" }}><CircularProgress /></Box>
           ) : grafanaError ? (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {grafanaError}
-            </Alert>
+            <Box sx={{ p: 4 }}><Alert severity="warning">{grafanaError}</Alert></Box>
           ) : (
-            <Box sx={{ position: "relative", width: "100%", height: 700, minHeight: 500, bgcolor: "#f5f5f5", borderRadius: 1 }}>
-              <iframe
-                src={grafanaUrl}
-                width="100%"
-                height="100%"
-                style={{
-                  border: "none",
-                  borderRadius: "4px",
-                }}
-                title="Grafana Dashboard"
-              />
+            <Box sx={{ width: "100%", height: 700, bgcolor: "#f8fafc" }}>
+              <iframe src={grafanaUrl} width="100%" height="100%" style={{ border: "none" }} title="Grafana" allowFullScreen />
             </Box>
-          )}
-
-          {!loading && !grafanaError && (
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
-              Dashboard hiển thị dữ liệu real-time từ tất cả thiết bị của bạn.
-            </Typography>
           )}
         </CardContent>
       </Card>
 
-      {/* Recent Alerts & Activity */}
-      <Grid container spacing={2}>
-        <Grid item xs={12} md={6}>
-          <Card sx={{ height: "100%" }}>
-            <CardContent>
-              <Typography variant="subtitle1" gutterBottom>
-                Alert mới nhất
-              </Typography>
-              {recentAlerts.length === 0 ? (
-                <Typography color="text.secondary">Chưa có alert.</Typography>
-              ) : (
-                <List dense>
-                  {recentAlerts.map((a) => {
-                    const chip = statusChip(a.severity);
-                    const timestamp = a.triggered_at || a.timestamp;
-                    return (
-                      <ListItem key={a.id} alignItems="flex-start" divider>
-                        <ListItemText
-                          primary={
-                            <Stack direction="row" spacing={1} alignItems="center">
-                              <Chip label={chip.label} color={chip.color} size="small" />
-                              <Typography fontWeight={600}>{a.message || `${a.type} alert`}</Typography>
-                            </Stack>
-                          }
-                          slotProps={{
-                            secondary: {
-                              component: 'div'
-                            }
-                          }}
-                          secondary={
-                            <Stack spacing={0.5}>
-                              <Typography variant="body2" color="text.secondary">
-                                Device #{a.device_id} • {a.device_name || `Device ${a.device_id}`}
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {timestamp ? new Date(timestamp).toLocaleString() : ""}
-                              </Typography>
-                            </Stack>
-                          }
-                        />
-                      </ListItem>
-                    );
-                  })}
-                </List>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
+      {/* 3. Alert History - DƯỚI CÙNG & FULL WIDTH */}
+      <Card sx={{ borderRadius: 3 }}>
+        <Box sx={{ p: 2, bgcolor: "#fcfcfc" }}>
+          <Typography variant="h6" fontWeight={700}>Lịch sử cảnh báo</Typography>
+        </Box>
+        <Divider />
+        <CardContent sx={{ p: 0 }}>
+          {alerts.length === 0 ? (
+            <Box sx={{ p: 4, textAlign: "center" }}><Typography color="text.secondary">Chưa có dữ liệu cảnh báo.</Typography></Box>
+          ) : (
+            <Grid container>
+              {alerts.map((a, idx) => (
+                <Grid item xs={12} md={6} key={a.id || idx}>
+                  <ListItem divider sx={{ py: 2 }}>
+                    <ListItemText
+                      primary={
+                        <Stack direction="row" spacing={2} alignItems="center">
+                          <Chip 
+                            label={a.severity?.toUpperCase() || "MEDIUM"} 
+                            color={a.severity === "high" ? "error" : "warning"} 
+                            size="small" 
+                            sx={{ fontWeight: 700, width: 80 }} 
+                          />
+                          <Typography variant="body2" fontWeight={700}>{a.message || "Cảnh báo thiết bị"}</Typography>
+                        </Stack>
+                      }
+                      secondary={
+                        <Typography variant="caption" color="text.secondary" sx={{ ml: 12.5, display: 'block', mt: 0.5 }}>
+                          Thiết bị: <b>{a.device_name || `ID ${a.device_id}`}</b> • {new Date(a.triggered_at || a.timestamp).toLocaleString("vi-VN")}
+                        </Typography>
+                      }
+                    />
+                  </ListItem>
+                </Grid>
+              ))}
+            </Grid>
+          )}
+        </CardContent>
+      </Card>
     </Box>
   );
 };
