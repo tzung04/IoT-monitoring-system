@@ -14,7 +14,6 @@ import { testConnection } from './config/influxdb.js';
 import authRoutes from './routes/auth.routes.js';
 import deviceRoutes from './routes/device.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
-import grafanaRoutes from './routes/grafana.routes.js'
 import dataRoutes from './routes/data.routes.js';
 import alertRoutes from './routes/alert.routes.js';
 import historyRoutes from './routes/history.routes.js';
@@ -57,7 +56,6 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/devices', deviceRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-app.use('/grafana', grafanaRoutes);
 app.use('/api/data', dataRoutes);
 app.use('/api/alert', alertRoutes);
 app.use('/api/history', historyRoutes);

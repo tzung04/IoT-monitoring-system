@@ -24,7 +24,7 @@ export const handlerGetDashboardUrl = async (req, res) => {
     
     // Build URL params
     const dashboardUid = process.env.GRAFANA_DASHBOARD_UID;
-    const backendUrl = process.env.BACKEND_URL || '';
+    const grafanaUrl = process.env.GRAFANA_URL;
     
     const params = new URLSearchParams();
     params.append('orgId', '1');
@@ -44,7 +44,7 @@ export const handlerGetDashboardUrl = async (req, res) => {
     params.append('exp', exp);
     
     // Trả về URL để đi qua backend proxy
-    const embedUrl = `${backendUrl}/grafana/d/${dashboardUid}/iot-monitoring?${params.toString()}`;
+    const embedUrl = `${grafanaUrl}/d/${dashboardUid}/iot-monitoring?${params.toString()}`;
     
     return res.json({
       embedUrl: embedUrl,

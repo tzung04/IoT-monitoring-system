@@ -444,17 +444,11 @@ const DeviceManagementPage = () => {
                           <Typography variant="body2">
                             <strong>MAC:</strong> {device.mac_address}
                           </Typography>
-                          <Typography variant="body2">
-                            <strong>Serial:</strong> {device.device_serial}
-                          </Typography>
                           {device.description && (
                             <Typography variant="body2" color="textSecondary">
-                              <strong>Mô tả:</strong> {device.description}
+                              <strong>Địa điểm:</strong> {device.description}
                             </Typography>
                           )}
-                          <Typography variant="body2" color="textSecondary">
-                            <strong>Topic:</strong> {device.topic}
-                          </Typography>
 
                           {/* Latest Data */}
                           <Box sx={{ 

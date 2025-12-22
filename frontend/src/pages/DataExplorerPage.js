@@ -175,7 +175,7 @@ const DataExplorerPage = () => {
     }
 
     const device = devices.find((d) => d.id === Number(filters.deviceId));
-    const headers = ["Thời gian", "Thiết bị", "Loại metric", "Giá trị"];
+    const headers = ["Time", "Device", "Metric", "value"];
     const rows = sensorData.map((data) => [
       new Date(data.timestamp).toLocaleString("vi-VN"),
       device?.name || `Device #${filters.deviceId}`,
