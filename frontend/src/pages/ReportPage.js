@@ -25,11 +25,14 @@ import deviceService from "../services/device.service";
 import sensorService from "../services/sensor.service";
 import { trackEvent } from "../observability/faro";
 
+const ITEMS_PER_PAGE = 10;
+
 const ReportPage = () => {
   const [devices, setDevices] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const [toast, setToast] = useState({ open: false, message: "", severity: "info" });
 
   useEffect(() => {
@@ -143,6 +146,20 @@ ${devices.map((d) => `- ${d.name} (ID: ${d.id}, Status: ${d.is_active ? "Online"
       .slice(-7); // Last 7 days
   }, [alerts]);
 
+  const totalPages = Math.ceil(devices.length / ITEMS_PER_PAGE);
+  const paginatedDevices = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return devices.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [devices, currentPage]);
+
+  const handlePreviousPage = () => {
+    setCurrentPage((prev) => Math.max(prev - 1, 1));
+  };
+
+  const handleNextPage = () => {
+    setCurrentPage((prev) => Math.min(prev + 1, totalPages));
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", py: 8 }}>
@@ -157,7 +174,7 @@ ${devices.map((d) => `- ${d.name} (ID: ${d.id}, Status: ${d.is_active ? "Online"
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
-            📊 Báo cáo & Xuất dữ liệu
+            Báo cáo & Xuất dữ liệu
           </Typography>
           <Typography variant="body2" color="textSecondary">
             Xem tóm tắt hệ thống và lên lịch gửi báo cáo tự động
@@ -180,7 +197,7 @@ ${devices.map((d) => `- ${d.name} (ID: ${d.id}, Status: ${d.is_active ? "Online"
           <Card>
             <CardContent sx={{ textAlign: "center" }}>
               <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
-                📱 Tổng thiết bị
+                Tổng thiết bị
               </Typography>
               <Typography variant="h4" sx={{ fontWeight: 700, color: "primary.main" }}>
                 {deviceStats.total}
@@ -193,7 +210,7 @@ ${devices.map((d) => `- ${d.name} (ID: ${d.id}, Status: ${d.is_active ? "Online"
           <Card>
             <CardContent sx={{ textAlign: "center" }}>
               <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
-                🟢 Online
+                Online
               </Typography>
               <Typography variant="h4" sx={{ fontWeight: 700, color: "success.main" }}>
                 {deviceStats.online}
@@ -206,7 +223,7 @@ ${devices.map((d) => `- ${d.name} (ID: ${d.id}, Status: ${d.is_active ? "Online"
           <Card>
             <CardContent sx={{ textAlign: "center" }}>
               <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
-                🔴 Offline
+                Offline
               </Typography>
               <Typography variant="h4" sx={{ fontWeight: 700, color: "error.main" }}>
                 {deviceStats.offline}
@@ -219,7 +236,7 @@ ${devices.map((d) => `- ${d.name} (ID: ${d.id}, Status: ${d.is_active ? "Online"
           <Card>
             <CardContent sx={{ textAlign: "center" }}>
               <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
-                🚨 Tổng cảnh báo
+                Tổng cảnh báo
               </Typography>
               <Typography variant="h4" sx={{ fontWeight: 700, color: "warning.main" }}>
                 {alertStats.total}
@@ -235,11 +252,11 @@ ${devices.map((d) => `- ${d.name} (ID: ${d.id}, Status: ${d.is_active ? "Online"
           <Card>
             <CardContent>
               <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-                🚨 Phân loại cảnh báo
+                Phân loại cảnh báo
               </Typography>
               <Stack spacing={2}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Typography variant="body2">🔴 High (Cao)</Typography>
+                  <Typography variant="body2">High (Cao)</Typography>
                   <Chip
                     label={alertStats.high}
                     color="error"
@@ -248,7 +265,7 @@ ${devices.map((d) => `- ${d.name} (ID: ${d.id}, Status: ${d.is_active ? "Online"
                   />
                 </Stack>
                 <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Typography variant="body2">🟡 Medium (Trung bình)</Typography>
+                  <Typography variant="body2">Medium (Trung bình)</Typography>
                   <Chip
                     label={alertStats.medium}
                     color="warning"
@@ -257,7 +274,7 @@ ${devices.map((d) => `- ${d.name} (ID: ${d.id}, Status: ${d.is_active ? "Online"
                   />
                 </Stack>
                 <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Typography variant="body2">🟢 Low (Thấp)</Typography>
+                  <Typography variant="body2">Low (Thấp)</Typography>
                   <Chip
                     label={alertStats.low}
                     color="success"
@@ -275,7 +292,7 @@ ${devices.map((d) => `- ${d.name} (ID: ${d.id}, Status: ${d.is_active ? "Online"
           <Card>
             <CardContent>
               <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-                📈 Xu hướng cảnh báo (7 ngày gần đây)
+                Xu hướng cảnh báo (7 ngày gần đây)
               </Typography>
               {alertTrend && alertTrend.length > 0 ? (
                 <HistoricalChart
@@ -300,7 +317,7 @@ ${devices.map((d) => `- ${d.name} (ID: ${d.id}, Status: ${d.is_active ? "Online"
         <Card>
           <CardContent>
             <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-              📋 Danh sách thiết bị
+              Danh sách thiết bị
             </Typography>
             <TableContainer>
               <Table>
@@ -313,14 +330,14 @@ ${devices.map((d) => `- ${d.name} (ID: ${d.id}, Status: ${d.is_active ? "Online"
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {devices.map((device) => (
+                  {paginatedDevices.map((device) => (
                     <TableRow key={device.id} sx={{ "&:hover": { backgroundColor: "#fafafa" } }}>
                       <TableCell>{device.id}</TableCell>
                       <TableCell>{device.name}</TableCell>
                       <TableCell sx={{ fontSize: "0.875rem" }}>{device.mac_address || "N/A"}</TableCell>
                       <TableCell>
                         <Chip
-                          label={device.is_active ? "🟢 Online" : "🔴 Offline"}
+                          label={device.is_active ? "Online" : "Offline"}
                           color={device.is_active ? "success" : "error"}
                           size="small"
                         />
@@ -330,6 +347,31 @@ ${devices.map((d) => `- ${d.name} (ID: ${d.id}, Status: ${d.is_active ? "Online"
                 </TableBody>
               </Table>
             </TableContainer>
+            
+            {/* Pagination */}
+            {devices.length > 0 && (
+              <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 2, mt: 3 }}>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={handlePreviousPage}
+                  disabled={currentPage === 1}
+                >
+                  ← Trước
+                </Button>
+                <Typography variant="body2" sx={{ minWidth: "100px", textAlign: "center" }}>
+                  Trang {currentPage} / {totalPages}
+                </Typography>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={handleNextPage}
+                  disabled={currentPage === totalPages}
+                >
+                  Sau →
+                </Button>
+              </Box>
+            )}
           </CardContent>
         </Card>
       )}

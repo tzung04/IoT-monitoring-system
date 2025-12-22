@@ -9,6 +9,7 @@ import ChangePasswordPage from "./pages/ChangePasswordPage";
 import DashboardPage from "./pages/DashboardPage";
 import DeviceManagementPage from "./pages/DeviceManagementPage";
 import DeviceDetailPage from "./pages/DeviceDetailPage";
+import PlaceManagementPage from "./pages/PlaceManagementPage";
 import AlertManagementPage from "./pages/AlertManagementPage";
 import AlertHistoryPage from "./pages/AlertHistoryPage";
 import DataExplorerPage from "./pages/DataExplorerPage";
@@ -52,6 +53,7 @@ function App() {
           <Route index element={<DashboardPage />} />
           <Route path="devices" element={<DeviceManagementPage />} />
           <Route path="devices/:id" element={<DeviceDetailPage />} />
+          <Route path="places" element={<PlaceManagementPage />} />
           <Route path="alerts" element={<AlertManagementPage />} />
           <Route path="alert-history" element={<AlertHistoryPage />} />
           <Route path="data-explorer" element={<DataExplorerPage />} />

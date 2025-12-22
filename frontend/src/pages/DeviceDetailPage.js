@@ -11,6 +11,8 @@ import {
   Divider,
   Button,
   TextField,
+  Select,
+  MenuItem,
   Snackbar,
   Alert,
   CircularProgress,
@@ -19,6 +21,7 @@ import deviceService from "../services/device.service";
 import useSocket from "../hooks/useSocket";
 import RealtimeChart from "../components/Charts/RealtimeChart";
 import { trackEvent } from "../observability/faro";
+import placeService from "../services/place.service";
 
 const MAX_POINTS = 50;
 
@@ -34,6 +37,7 @@ const DeviceDetailPage = () => {
   const [isEditingPlace, setIsEditingPlace] = useState(false);
   const [editPlaceId, setEditPlaceId] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [places, setPlaces] = useState([]);
   const [toast, setToast] = useState({ open: false, message: "", severity: "info" });
 
   useEffect(() => {
@@ -56,6 +60,18 @@ const DeviceDetailPage = () => {
     };
     fetchDevice();
   }, [id]);
+
+  useEffect(() => {
+    const loadPlaces = async () => {
+      try {
+        const data = await placeService.getPlaces();
+        setPlaces(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Error loading places:", err);
+      }
+    };
+    loadPlaces();
+  }, []);
 
   const handleSocket = (message) => {
     if (!message || !message.type) return;
@@ -237,15 +253,21 @@ const DeviceDetailPage = () => {
                     <Typography variant="caption" color="text.secondary">Vị trí (ID)</Typography>
                     {isEditingPlace ? (
                       <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
-                        <TextField
-                          type="number"
-                          size="small"
+                        <Select
                           value={editPlaceId}
                           onChange={(e) => setEditPlaceId(e.target.value)}
                           disabled={isSaving}
-                          placeholder="ID vị trí"
-                          sx={{ maxWidth: 120 }}
-                        />
+                          size="small"
+                          fullWidth
+                          sx={{ flex: 1 }}
+                        >
+                          <MenuItem value="">-- Không có vị trí --</MenuItem>
+                          {places.map((place) => (
+                            <MenuItem key={place.id} value={place.id}>
+                              {place.name}
+                            </MenuItem>
+                          ))}
+                        </Select>
                         <Button
                           size="small"
                           variant="contained"
@@ -270,7 +292,7 @@ const DeviceDetailPage = () => {
                     ) : (
                       <Stack direction="row" spacing={1} alignItems="center">
                         <Typography variant="body2">
-                          {device.place_id || "Chưa xác định"}
+                          {device.place_id ? places.find(p => p.id === device.place_id)?.name || `ID: ${device.place_id}` : "Chưa xác định"}
                         </Typography>
                         <Button
                           size="small"
