@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { trackEvent } from "../../observability/faro";
 import authService from "../../services/auth.service";
 
 const styles = {
@@ -191,7 +190,6 @@ const ResetPasswordForm = () => {
       setSuccess(
         "Mật khẩu đã được reset thành công! Đang chuyển hướng đến trang đăng nhập..."
       );
-      trackEvent("reset_password_success", { email: form.email });
 
       // Redirect to login after showing success
       setTimeout(() => {
@@ -202,7 +200,6 @@ const ResetPasswordForm = () => {
         err.response?.data?.message ||
         "Reset mật khẩu thất bại. Vui lòng thử lại.";
       setGeneralError(errorMsg);
-      trackEvent("reset_password_failed", { error: errorMsg });
       console.error("Reset password error:", err);
     } finally {
       setLoading(false);

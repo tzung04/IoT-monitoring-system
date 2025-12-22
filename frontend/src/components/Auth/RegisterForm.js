@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { trackEvent } from "../../observability/faro";
 import authService from "../../services/auth.service";
 
 const styles = {
@@ -188,9 +187,6 @@ const RegisterForm = () => {
 
       if (data.user) {
         setSuccess("Đăng ký thành công! Đang chuyển hướng đến trang đăng nhập...");
-        trackEvent("auth_register_success", {
-          username: form.username,
-        });
 
         // Redirect to login after showing success message
         setTimeout(() => {
@@ -202,9 +198,6 @@ const RegisterForm = () => {
         err.response?.data?.message ||
         "Đăng ký thất bại. Vui lòng thử lại.";
       setGeneralError(errorMsg);
-      trackEvent("auth_register_failed", {
-        error: errorMsg,
-      });
       console.error("Register error:", err);
     } finally {
       setLoading(false);

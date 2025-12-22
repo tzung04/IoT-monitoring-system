@@ -7,8 +7,6 @@ import {
   Typography,
   Stack,
   TextField,
-  Select,
-  MenuItem,
   Button,
   Chip,
   Grid,
@@ -20,13 +18,9 @@ import {
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
-import CheckIcon from "@mui/icons-material/Check";
-import CloseIcon from "@mui/icons-material/Close";
 import { CircularProgress } from "@mui/material";
 import deviceService from "../services/device.service";
 import sensorService from "../services/sensor.service";
-import useSocket from "../hooks/useSocket";
-import { trackEvent } from "../observability/faro";
 
 const DeviceManagementPage = () => {
   const [devices, setDevices] = useState([]);
@@ -97,21 +91,6 @@ const DeviceManagementPage = () => {
     return [...list, device];
   };
 
-  useSocket((message) => {
-    if (!message || !message.type) return;
-    if (message.type === "device_status") {
-      setDevices((prev) => upsertDevice(prev, message.data));
-    }
-    if (message.type === "device_added") {
-      setDevices((prev) => upsertDevice(prev, message.data));
-    }
-    if (message.type === "device_updated") {
-      setDevices((prev) => upsertDevice(prev, message.data));
-    }
-    if (message.type === "device_deleted") {
-      setDevices((prev) => prev.filter((d) => d.id !== message.data.id));
-    }
-  });
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -144,10 +123,6 @@ const DeviceManagementPage = () => {
   const handleFilterChange = (e) => {
     const next = { ...filters, [e.target.name]: e.target.value };
     setFilters(next);
-    trackEvent("device_filter_applied", {
-      field: e.target.name,
-      value: e.target.value ? String(e.target.value).slice(0, 50) : "",
-    });
   };
 
 
@@ -168,7 +143,6 @@ const DeviceManagementPage = () => {
       
       if (created && created.id) {
         setDevices((d) => upsertDevice(d, created));
-        trackEvent("device_added", { id: created.id });
         setToast({ 
           open: true, 
           message: `Đã thêm thiết bị "${created.name}"`, 
@@ -196,7 +170,6 @@ const DeviceManagementPage = () => {
     try {
       await deviceService.deleteDevice(id);
       setDevices((d) => d.filter((x) => x.id !== id));
-      trackEvent("device_deleted", { id });
       setToast({ open: true, message: "Đã xóa thiết bị", severity: "success" });
     } catch (err) {
       setError("Xóa không thành công");
@@ -212,7 +185,6 @@ const DeviceManagementPage = () => {
       is_active: device.is_active || false,
       topic: device.topic || "",
     });
-    trackEvent("device_edit_start", { id: device.id });
   };
   const cancelEdit = () => {
     setEditingId(null);
@@ -239,7 +211,6 @@ const DeviceManagementPage = () => {
       const updated = await deviceService.updateDevice(id, payload);
       setDevices((prev) => prev.map((d) => (d.id === id ? updated : d)));
       cancelEdit();
-      trackEvent("device_updated", { id });
       setToast({ open: true, message: "Đã cập nhật thiết bị", severity: "success" });
     } catch (err) {
       console.error("Update device error", err);
@@ -444,9 +415,9 @@ const DeviceManagementPage = () => {
                           <Typography variant="body2">
                             <strong>MAC:</strong> {device.mac_address}
                           </Typography>
-                          {device.description && (
+                          { (
                             <Typography variant="body2" color="textSecondary">
-                              <strong>Địa điểm:</strong> {device.description}
+                              <strong>Địa điểm:</strong> {'chưa làm cái này'}
                             </Typography>
                           )}
 

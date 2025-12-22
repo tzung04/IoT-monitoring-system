@@ -27,7 +27,6 @@ import ClearIcon from "@mui/icons-material/Clear";
 import sensorService from "../services/sensor.service";
 import deviceService from "../services/device.service";
 import HistoricalChart from "../components/Charts/HistoricalChart";
-import { trackEvent } from "../observability/faro";
 
 const DataExplorerPage = () => {
   const [devices, setDevices] = useState([]);
@@ -130,11 +129,6 @@ const DataExplorerPage = () => {
 
       setPage(0);
       
-      trackEvent("sensor_data_loaded", {
-        deviceId,
-        hours,
-        dataPoints: dataPoints.length,
-      });
 
       setToast({ open: true, message: `Tải ${dataPoints.length} điểm dữ liệu thành công`, severity: "success" });
     } catch (err) {
@@ -201,7 +195,6 @@ const DataExplorerPage = () => {
     link.click();
     document.body.removeChild(link);
 
-    trackEvent("sensor_data_exported", { deviceId: filters.deviceId, count: sensorData.length });
     setToast({ open: true, message: "Đã xuất dữ liệu", severity: "success" });
   };
 

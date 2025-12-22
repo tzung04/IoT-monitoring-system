@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import useAuth from "../../hooks/useAuth";
 import { useNavigate, Link } from "react-router-dom";
-import { trackEvent } from "../../observability/faro";
 import authService from "../../services/auth.service";
 
 const styles = {
@@ -143,7 +142,6 @@ const LoginForm = () => {
       if (data.token && data.user) {
         setSuccess("Đăng nhập thành công! Đang chuyển hướng...");
         login(data.token, data.user);
-        trackEvent("auth_login_success", { method: "api" });
 
         // Redirect after showing success message
         setTimeout(() => {
@@ -154,7 +152,6 @@ const LoginForm = () => {
       const errorMsg =
         err.response?.data?.message || "Đăng nhập thất bại. Vui lòng thử lại.";
       setError(errorMsg);
-      trackEvent("auth_login_failed", { method: "api", error: errorMsg });
       console.error("Login error:", err);
     } finally {
       setLoading(false);

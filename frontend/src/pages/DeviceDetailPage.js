@@ -16,9 +16,7 @@ import {
   CircularProgress,
 } from "@mui/material";
 import deviceService from "../services/device.service";
-import useSocket from "../hooks/useSocket";
 import RealtimeChart from "../components/Charts/RealtimeChart";
-import { trackEvent } from "../observability/faro";
 
 const MAX_POINTS = 50;
 
@@ -28,7 +26,6 @@ const DeviceDetailPage = () => {
   const [device, setDevice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sensorData, setSensorData] = useState([]);
-  const [streamTracked, setStreamTracked] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [isEditingPlace, setIsEditingPlace] = useState(false);
@@ -44,9 +41,6 @@ const DeviceDetailPage = () => {
         setDevice(resp);
         setEditName(resp.name);
         setEditPlaceId(resp.place_id || "");
-        if (resp?.id) {
-          trackEvent("device_detail_loaded", { id: resp.id, mac_address: resp.mac_address });
-        }
       } catch (err) {
         console.error("Load device error", err);
         setToast({ open: true, message: "Không thể tải thông tin thiết bị", severity: "error" });
@@ -56,27 +50,6 @@ const DeviceDetailPage = () => {
     };
     fetchDevice();
   }, [id]);
-
-  const handleSocket = (message) => {
-    if (!message || !message.type) return;
-    if (message.type === "device_updated" && message.data?.id === Number(id)) {
-      setDevice(message.data);
-      setEditName(message.data.name);
-    }
-    if (message.type === "sensor_data" && message.data?.deviceId === Number(id)) {
-      setSensorData((prev) => {
-        const next = [...prev, message.data];
-        if (next.length > MAX_POINTS) next.shift();
-        if (!streamTracked) {
-          trackEvent("sensor_stream_started", { deviceId: message.data.deviceId, type: message.data.type });
-          setStreamTracked(true);
-        }
-        return next;
-      });
-    }
-  };
-
-  useSocket(handleSocket);
 
   const handleSaveName = async () => {
     if (!editName.trim()) {
@@ -132,7 +105,6 @@ const DeviceDetailPage = () => {
       setIsSaving(true);
       const updated = await deviceService.updateDevice(id, { is_active: !device.is_active });
       setDevice(updated);
-      trackEvent("device_toggled", { id, is_active: updated.is_active });
       setToast({ 
         open: true, 
         message: updated.is_active ? "Thiết bị đã được kích hoạt" : "Thiết bị đã bị vô hiệu hóa", 

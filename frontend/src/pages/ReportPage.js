@@ -23,7 +23,6 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import HistoricalChart from "../components/Charts/HistoricalChart";
 import deviceService from "../services/device.service";
 import sensorService from "../services/sensor.service";
-import { trackEvent } from "../observability/faro";
 
 const ReportPage = () => {
   const [devices, setDevices] = useState([]);
@@ -46,7 +45,6 @@ const ReportPage = () => {
       
       setDevices(deviceList || []);
       setAlerts(alertHistory || []);
-      trackEvent("report_page_loaded", { deviceCount: deviceList?.length, alertCount: alertHistory?.length });
     } catch (err) {
       console.error("Load report data error:", err);
       setToast({ open: true, message: "Không thể tải dữ liệu báo cáo", severity: "error" });
@@ -96,7 +94,6 @@ ${devices.map((d) => `- ${d.name} (ID: ${d.id}, Status: ${d.is_active ? "Online"
       
       const fileName = `report_${new Date().toISOString().split("T")[0]}.txt`;
       downloadFile(fileName, content, "text/plain");
-      trackEvent("report_exported", { format: "txt" });
       setToast({ open: true, message: "Đã tải xuống báo cáo", severity: "success" });
     } catch (err) {
       console.error("export report error", err);

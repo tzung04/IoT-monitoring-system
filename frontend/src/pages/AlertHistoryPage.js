@@ -19,7 +19,6 @@ import {
 
 import sensorService from "../services/sensor.service";
 import deviceService from "../services/device.service";
-import { trackEvent } from "../observability/faro";
 
 // Helper map icon
 const METRIC_ICONS = {
@@ -124,7 +123,6 @@ const AlertHistoryPage = () => {
       const data = await fetchAlertsInternal(filters);
       setAlerts(data);
       setPage(0);
-      trackEvent("alert_history_filter", filters);
     } catch (err) {
       setToast({ open: true, message: "Lỗi khi lọc dữ liệu", severity: "error" });
     } finally {
@@ -186,7 +184,6 @@ const AlertHistoryPage = () => {
     link.click();
     document.body.removeChild(link);
 
-    trackEvent("alert_history_exported", { count: alerts.length });
     setToast({ open: true, message: "Đã xuất dữ liệu thành công", severity: "success" });
   };
 

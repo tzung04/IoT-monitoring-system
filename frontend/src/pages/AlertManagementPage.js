@@ -22,7 +22,6 @@ import useAuth from "../hooks/useAuth";
 import alertService from "../services/alert.service";
 import deviceService from "../services/device.service";
 import sensorService from "../services/sensor.service";
-import { trackEvent } from "../observability/faro";
 
 const MAX_ALERTS = 50;
 
@@ -151,7 +150,6 @@ const AlertManagementPage = () => {
       
       setForm({ ...form, threshold: 28 });
       
-      trackEvent("alert_rule_created", { id: created?.id, type: payload.metric_type });
       setToast({ open: true, message: "Đã tạo quy tắc cảnh báo", severity: "success" });
     } catch (err) {
       setToast({ open: true, message: err.message || "Tạo quy tắc thất bại", severity: "error" });
@@ -192,7 +190,6 @@ const AlertManagementPage = () => {
 
       setRules((prev) => prev.map((r) => (r.id === id ? transformedRule : r)));
       
-      trackEvent("alert_rule_updated", { id, active: payload.is_enabled });
       setToast({ open: true, message: "Đã cập nhật quy tắc", severity: "success" });
       setEditRuleId(null);
     } catch (err) {
@@ -205,7 +202,6 @@ const AlertManagementPage = () => {
     try {
       await alertService.deleteRule(id);
       setRules((prev) => prev.filter((r) => r.id !== id));
-      trackEvent("alert_rule_deleted", { id });
       setToast({ open: true, message: "Đã xóa quy tắc", severity: "success" });
     } catch (err) {
       setToast({ open: true, message: err.message || "Xóa thất bại", severity: "error" });

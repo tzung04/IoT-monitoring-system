@@ -21,15 +21,12 @@ import OnlinePredictionIcon from "@mui/icons-material/OnlinePrediction";
 import TimelineIcon from "@mui/icons-material/Timeline";
 import deviceService from "../services/device.service";
 import dashboardService from "../services/dashboard.service";
-import useSocket from "../hooks/useSocket";
 import * as sensorService from "../services/sensor.service"
 
-const MAX_EVENTS = 12;
 
 const DashboardPage = () => {
   const [devices, setDevices] = useState([]);
   const [alerts, setAlerts] = useState([]);
-  const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [grafanaUrl, setGrafanaUrl] = useState("");
   const [grafanaError, setGrafanaError] = useState(null);
@@ -51,15 +48,6 @@ const DashboardPage = () => {
       }
     });
     return uniq.slice(0, limit);
-  };
-
-  const pushEvent = (item) => {
-    setEvents((prev) => {
-      const key = item.key;
-      const filtered = key ? prev.filter((e) => e.key !== key) : prev;
-      const next = [item, ...filtered];
-      return next.slice(0, MAX_EVENTS);
-    });
   };
 
   useEffect(() => {
@@ -106,47 +94,6 @@ const DashboardPage = () => {
     
     return () => clearInterval(interval);
   }, []);
-
-  useSocket((message) => {
-    if (!message || !message.type) return;
-    
-    if (message.type === "device_status") {
-      setDevices((prev) =>
-        prev.map((d) => (d.id === message.data.id ? { ...d, ...message.data } : d))
-      );
-      pushEvent({
-        ts: Date.now(),
-        label: `Device #${message.data.id} ${message.data.status || "unknown"}`,
-        type: "device",
-      });
-    }
-    
-    if (message.type === "device_added") {
-      setDevices((prev) => [...prev, message.data]);
-      pushEvent({ ts: Date.now(), label: `Device #${message.data.id} added`, type: "device" });
-    }
-    
-    if (message.type === "device_updated") {
-      setDevices((prev) => prev.map((d) => (d.id === message.data.id ? message.data : d)));
-      pushEvent({ ts: Date.now(), label: `Device #${message.data.id} updated`, type: "device" });
-    }
-    
-    if (message.type === "device_deleted") {
-      setDevices((prev) => prev.filter((d) => d.id !== message.data.id));
-      pushEvent({ ts: Date.now(), label: `Device #${message.data.id} deleted`, type: "device" });
-    }
-    
-    if (message.type === "alert") {
-      setAlerts((prev) => normalizeAlerts([message.data, ...prev]));
-      pushEvent({
-        key: `alert-${message.data?.id || message.data?.triggered_at || Date.now()}`,
-        ts: Date.now(),
-        label: message.data?.message || "New alert",
-        type: "alert",
-        severity: message.data?.rule_severity || message.data?.severity,
-      });
-    }
-  });
 
   const stats = useMemo(() => {
     const total = devices.length;
@@ -298,35 +245,6 @@ const DashboardPage = () => {
                       </ListItem>
                     );
                   })}
-                </List>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Card sx={{ height: "100%" }}>
-            <CardContent>
-              <Typography variant="subtitle1" gutterBottom>
-                Hoạt động gần đây
-              </Typography>
-              {events.length === 0 ? (
-                <Typography color="text.secondary">
-                  {loading ? "Đang tải..." : "Chưa có hoạt động mới."}
-                </Typography>
-              ) : (
-                <List dense>
-                  {events.map((e, idx) => (
-                    <React.Fragment key={`${e.ts}-${idx}`}>
-                      <ListItem>
-                        <ListItemText
-                          primary={e.label}
-                          secondary={new Date(e.ts).toLocaleTimeString()}
-                        />
-                      </ListItem>
-                      {idx !== events.length - 1 && <Divider component="li" />}
-                    </React.Fragment>
-                  ))}
                 </List>
               )}
             </CardContent>
