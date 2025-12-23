@@ -6,9 +6,8 @@ Công nghệ: Node.js, React, InfluxDB, MQTT, Docker
 2. SƠ ĐỒ USECASE
 Actors:
 - Người dùng (User)
-- Hệ thống (System)
-- Broker MQTT
-- Cảm biến (Sensor)
+- Hệ thống (Backend)
+- Cảm biến (IoT device)
 
 Use Cases:
 
@@ -52,11 +51,6 @@ Use Cases:
 3.4. DevOps
 •	Docker & Docker Compose
 •	Git & GitHub cho version control
-4. HƯỚNG DẪN CÀI ĐẶT
- Yêu cầu hệ thống
-•	Node.js 16+
-•	Docker & Docker Compose
-•	Git
 
 5. QUY TRÌNH PHÁT TRIỂN
 Quy tắc Git
@@ -77,25 +71,27 @@ monitoring-iot-web/
 •	POST /api/devices
 •	PUT /api/devices/:id
 7.3. Data
-•	GET /api/data/realtime
-•	GET /api/data/history
-•	GET /api/data/export
+•	GET /api/data/device/:id
+•	GET /api/data/device/:id/lastest
+•	GET /api/history/sensor
 7.4. Alerts
 •	GET /api/alerts
-•	POST /api/alerts/threshold
+•	POST /api/alerts/
+•	GET /api/history/alerts-device
+•	GET /api/history/alerts-user
 8. PHÂN CÔNG CÔNG VIỆC 
 Phan Trí Dũng: Backend & MQTT
 •	Thiết lập MQTT broker
 •	Xử lý data ingestion
 •	Kết nối InfluxDB
+•	Grafana
 •	Authentication system
 Lê Văn Được: Backend & API
 •	Alert notifications
 •	ThresholdSettings
 •	REST API development
-•	Data export features
 Vũ Viết Dũng: Frontend & UI
 •	React components
-•	Grafana
+•	Data export features
 Vũ Mạnh Dũng: 
 
