@@ -1,107 +1,82 @@
 import api from "./apiClient";
 
-const BASE = "/alerts";
-const RULES = `${BASE}/rules`;
-const NOTIFICATIONS = `${BASE}/notifications`;
+const BASE = "/alert";
 
-export const getAlerts = async () => {
-  try {
-    const resp = await api.get(BASE);
-    return resp.data || [];
-  } catch (err) {
-    console.error("getAlerts error", err);
-    return [];
-  }
-};
-
-export const getAlertHistory = async () => {
-  try {
-    const resp = await api.get(`${BASE}/history`);
-    return resp.data || [];
-  } catch (err) {
-    console.error("getAlertHistory error", err);
-    return [];
-  }
-};
-
+/**
+ * Lấy tất cả quy tắc cảnh báo của User hiện tại
+ * Gọi API: GET /alert/all
+ */
 export const getRules = async () => {
   try {
-    const resp = await api.get(RULES);
+    console.log("Fetching all rules via /alert/all");
+    
+    const resp = await api.get(`${BASE}/all`);
+    
+    console.log(`Fetched ${resp.data?.length || 0} rules`);
     return resp.data || [];
   } catch (err) {
-    console.error("getRules error", err);
+    console.error("getRules error:", err);
+    // Trả về mảng rỗng để không làm crash giao diện
     return [];
   }
 };
 
+/**
+ * Get alert rules for a specific device
+ */
+export const getRulesByDevice = async (deviceId) => {
+  if (!deviceId) throw new Error("Device ID is required");
+  try {
+    const resp = await api.get(`${BASE}/${deviceId}`);
+    return resp.data || [];
+  } catch (err) {
+    if (err.response?.status === 404) return [];
+    throw err;
+  }
+};
+
+/**
+ * Create a new alert rule
+ */
 export const createRule = async (payload) => {
   try {
-    const resp = await api.post(RULES, payload);
+    const resp = await api.post(BASE, payload);
     return resp.data;
   } catch (err) {
-    console.error("createRule error", err);
-    throw err;
+    throw new Error(err.response?.data?.message || "Failed to create rule");
   }
 };
 
-export const updateRule = async (id, payload) => {
+/**
+ * Update an alert rule
+ */
+export const updateRule = async (ruleId, payload) => {
+  if (!ruleId) throw new Error("Rule ID is required");
   try {
-    const resp = await api.patch(`${RULES}/${id}`, payload);
+    const resp = await api.put(`${BASE}/${ruleId}`, payload);
     return resp.data;
   } catch (err) {
-    console.error("updateRule error", err);
-    throw err;
+    throw new Error(err.response?.data?.message || "Failed to update rule");
   }
 };
 
-export const deleteRule = async (id) => {
+/**
+ * Delete an alert rule
+ */
+export const deleteRule = async (ruleId) => {
+  if (!ruleId) throw new Error("Rule ID is required");
   try {
-    const resp = await api.delete(`${RULES}/${id}`);
+    const resp = await api.delete(`${BASE}/${ruleId}`);
     return resp.data;
   } catch (err) {
-    console.error("deleteRule error", err);
-    throw err;
-  }
-};
-
-export const getNotificationConfig = async () => {
-  try {
-    const resp = await api.get(NOTIFICATIONS);
-    return resp.data || {};
-  } catch (err) {
-    console.error("getNotificationConfig error", err);
-    return {};
-  }
-};
-
-export const updateNotificationConfig = async (payload) => {
-  try {
-    const resp = await api.put(NOTIFICATIONS, payload);
-    return resp.data;
-  } catch (err) {
-    console.error("updateNotificationConfig error", err);
-    throw err;
-  }
-};
-
-export const sendTestNotification = async () => {
-  try {
-    const resp = await api.post(`${NOTIFICATIONS}/test`);
-    return resp.data;
-  } catch (err) {
-    console.error("sendTestNotification error", err);
-    throw err;
+    throw new Error(err.response?.data?.message || "Failed to delete rule");
   }
 };
 
 export default {
-  getAlerts,
-  getAlertHistory,
   getRules,
+  getRulesByDevice,
   createRule,
   updateRule,
   deleteRule,
-  getNotificationConfig,
-  updateNotificationConfig,
-  sendTestNotification,
 };

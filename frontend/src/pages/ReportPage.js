@@ -1,240 +1,248 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Grid,
-  Stack,
-  Button,
-  Select,
-  MenuItem,
-  TextField,
-  Switch,
-  Chip,
-  Snackbar,
-  Alert,
+  Box, Card, CardContent, Typography, Grid, Stack, Button, Chip,
+  Snackbar, Alert, CircularProgress, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, TablePagination, Divider, Avatar
 } from "@mui/material";
-import DownloadIcon from "@mui/icons-material/Download";
-import ScheduleIcon from "@mui/icons-material/Schedule";
-import AssessmentIcon from "@mui/icons-material/Assessment";
+import {
+  Download as DownloadIcon,
+  Refresh as RefreshIcon,
+  Devices as DevicesIcon,
+  Wifi as WifiIcon,
+  WifiOff as WifiOffIcon,
+  Warning as WarningIcon,
+  Assessment as AssessmentIcon
+} from "@mui/icons-material";
 import HistoricalChart from "../components/Charts/HistoricalChart";
-import reportService from "../services/report.service";
+import deviceService from "../services/device.service";
+import sensorService from "../services/sensor.service";
 
 const ReportPage = () => {
-  const [summary, setSummary] = useState(null);
-  const [schedule, setSchedule] = useState({ enabled: false, frequency: "daily", recipients: "" });
+  const [devices, setDevices] = useState([]);
+  const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [toast, setToast] = useState({ open: false, message: "", severity: "info" });
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      const [sum, sched] = await Promise.all([reportService.getSummary(), reportService.getSchedule()]);
-      setSummary(sum);
-      setSchedule({
-        enabled: sched?.enabled || false,
-        frequency: sched?.frequency || "daily",
-        recipients: Array.isArray(sched?.recipients) ? sched.recipients.join(", ") : sched?.recipients || "",
-      });
-      setLoading(false);
-    };
-    load();
+    loadData();
   }, []);
 
-  const alertTrendSeries = useMemo(() => {
-    if (!summary?.trend) return [];
-    return summary.trend.map((t) => ({ label: t.label, count: t.count }));
-  }, [summary]);
-
-  const saveSchedule = async () => {
+  const loadData = async () => {
     try {
-      setSaving(true);
-      const payload = {
-        enabled: schedule.enabled,
-        frequency: schedule.frequency,
-        recipients: schedule.recipients
-          .split(",")
-          .map((v) => v.trim())
-          .filter(Boolean),
-      };
-      const saved = await reportService.saveSchedule(payload);
-      setSchedule({
-        enabled: saved?.enabled || false,
-        frequency: saved?.frequency || "daily",
-        recipients: Array.isArray(saved?.recipients) ? saved.recipients.join(", ") : saved?.recipients || "",
-      });
-      setToast({ open: true, message: "Đã lưu lịch báo cáo", severity: "success" });
+      setLoading(true);
+      const [deviceList, alertHistory] = await Promise.all([
+        deviceService.getDevices(),
+        sensorService.getAlertHistory(),
+      ]);
+      setDevices(deviceList || []);
+      setAlerts(alertHistory || []);
     } catch (err) {
-      console.error("save schedule error", err);
-      setToast({ open: true, message: "Lưu lịch báo cáo thất bại", severity: "error" });
+      setToast({ open: true, message: "Không thể tải dữ liệu báo cáo", severity: "error" });
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
   };
 
-  const downloadFile = (fileName, mimeType, base64Content) => {
-    try {
-      const link = document.createElement("a");
-      link.href = `data:${mimeType};base64,${base64Content}`;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (err) {
-      console.error("download file error", err);
-    }
+  // Thống kê thiết bị
+  const deviceStats = useMemo(() => {
+    const total = devices.length;
+    const online = devices.filter((d) => d.is_active).length;
+    return { total, online, offline: total - online };
+  }, [devices]);
+
+  // Thống kê cảnh báo
+  const alertStats = useMemo(() => ({
+    total: alerts.length,
+    high: alerts.filter((a) => a.severity === "high").length,
+    medium: alerts.filter((a) => a.severity === "medium").length,
+    low: alerts.filter((a) => a.severity === "low").length,
+  }), [alerts]);
+
+  // Biểu đồ xu hướng
+  const alertTrend = useMemo(() => {
+    const grouped = {};
+    alerts.forEach((alert) => {
+      const date = new Date(alert.triggered_at || alert.timestamp).toLocaleDateString("vi-VN");
+      grouped[date] = (grouped[date] || 0) + 1;
+    });
+    return Object.entries(grouped)
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => new Date(a.label.split('/').reverse().join('-')) - new Date(b.label.split('/').reverse().join('-')))
+      .slice(-7);
+  }, [alerts]);
+
+  const handleExportCSV = () => {
+    const headers = ["ID", "Tên thiết bị", "MAC Address", "Trạng thái"];
+    const rows = devices.map(d => [d.id, d.name, d.mac_address || "N/A", d.is_active ? "Online" : "Offline"]);
+    
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Report_Devices_${new Date().getTime()}.csv`;
+    link.click();
+    setToast({ open: true, message: "Đã xuất báo cáo CSV thành công", severity: "success" });
   };
 
-  const exportReport = async (format) => {
-    try {
-      const resp = await reportService.exportReport(format);
-      if (resp?.content && resp?.fileName) {
-        downloadFile(resp.fileName, resp.mimeType || "application/octet-stream", resp.content);
-        setToast({ open: true, message: `Đã export ${format.toUpperCase()}`, severity: "success" });
-      } else {
-        setToast({ open: true, message: "Không có dữ liệu export", severity: "warning" });
-      }
-    } catch (err) {
-      console.error("export report error", err);
-      setToast({ open: true, message: "Export thất bại", severity: "error" });
-    }
-  };
+  const SummaryCard = ({ title, value, icon, color }) => (
+    <Card sx={{ height: '100%', borderBottom: `4px solid ${color}` }}>
+      <CardContent>
+        <Stack direction="row" spacing={2} alignItems="center">
+          <Avatar sx={{ bgcolor: `${color}15`, color: color }}>{icon}</Avatar>
+          <Box>
+            <Typography variant="body2" color="textSecondary">{title}</Typography>
+            <Typography variant="h5" sx={{ fontWeight: 800 }}>{value}</Typography>
+          </Box>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
 
-  if (loading) return <div style={{ padding: 20 }}>Đang tải báo cáo...</div>;
+  if (loading) return (
+    <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", py: 10 }}>
+      <CircularProgress thickness={5} size={50} />
+    </Box>
+  );
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      <Typography variant="h5" gutterBottom>
-        Báo cáo & Export
-      </Typography>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 3, p: { xs: 1, md: 3 }, bgcolor: "#f8fafc", minHeight: "100vh" }}>
+      {/* Header */}
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 800, color: "#1e293b" }}>Báo cáo hệ thống</Typography>
+          <Typography variant="body2" color="textSecondary">Tổng hợp trạng thái thiết bị và lịch sử cảnh báo</Typography>
+        </Box>
+        <Button variant="contained" startIcon={<RefreshIcon />} onClick={loadData} sx={{ borderRadius: 2 }}>
+          Làm mới
+        </Button>
+      </Box>
 
-      <Grid container spacing={2}>
-        <Grid item xs={12} md={4}>
-          <Card>
+      {/* Summary Row */}
+      <Grid container spacing={3}>
+        <Grid item xs={12} sm={6} md={3}>
+          <SummaryCard title="Tổng thiết bị" value={deviceStats.total} icon={<DevicesIcon />} color="#6366f1" />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <SummaryCard title="Đang Online" value={deviceStats.online} icon={<WifiIcon />} color="#22c55e" />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <SummaryCard title="Đang Offline" value={deviceStats.offline} icon={<WifiOffIcon />} color="#ef4444" />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <SummaryCard title="Tổng cảnh báo" value={alertStats.total} icon={<WarningIcon />} color="#f59e0b" />
+        </Grid>
+      </Grid>
+
+      <Grid container spacing={3}>
+        {/* Trend Chart */}
+        <Grid item xs={12} md={8}>
+          <Card sx={{ borderRadius: 3, boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
             <CardContent>
-              <Stack direction="row" alignItems="center" spacing={1} mb={1}>
-                <AssessmentIcon color="primary" />
-                <Typography variant="subtitle1">Tóm tắt</Typography>
-              </Stack>
-              <Stack spacing={1}>
-                <Stack direction="row" justifyContent="space-between">
-                  <Typography variant="body2">Tổng thiết bị</Typography>
-                  <Typography fontWeight={600}>{summary?.devices?.total ?? "-"}</Typography>
-                </Stack>
-                <Stack direction="row" justifyContent="space-between">
-                  <Typography variant="body2">Online</Typography>
-                  <Typography fontWeight={600}>{summary?.devices?.online ?? "-"}</Typography>
-                </Stack>
-                <Stack direction="row" justifyContent="space-between">
-                  <Typography variant="body2">Offline</Typography>
-                  <Typography fontWeight={600}>{summary?.devices?.offline ?? "-"}</Typography>
-                </Stack>
-                <Stack direction="row" justifyContent="space-between">
-                  <Typography variant="body2">Alerts</Typography>
-                  <Typography fontWeight={600}>{summary?.alerts?.total ?? "-"}</Typography>
-                </Stack>
-                <Stack direction="row" spacing={1}>
-                  <Chip size="small" label={`High: ${summary?.alerts?.high ?? 0}`} color="error" />
-                  <Chip size="small" label={`Medium: ${summary?.alerts?.medium ?? 0}`} color="warning" />
-                  <Chip size="small" label={`Low: ${summary?.alerts?.low ?? 0}`} />
-                </Stack>
-              </Stack>
+              <Typography variant="h6" sx={{ fontWeight: 700, mb: 3, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <AssessmentIcon color="primary" /> Biến thiên cảnh báo (7 ngày qua)
+              </Typography>
+              <HistoricalChart
+                data={alertTrend}
+                xKey="label"
+                series={[{ dataKey: "count", name: "Số cảnh báo", color: "#6366f1" }]}
+                height={300}
+              />
             </CardContent>
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={8}>
-          <Card>
+        {/* Severity Breakdown */}
+        <Grid item xs={12} md={4}>
+          <Card sx={{ borderRadius: 3, height: '100%' }}>
             <CardContent>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-                <Typography variant="subtitle1">Biểu đồ alert theo thời gian</Typography>
-                <ScheduleIcon fontSize="small" />
+              <Typography variant="h6" sx={{ fontWeight: 700, mb: 3 }}>Mức độ nghiêm trọng</Typography>
+              <Stack spacing={3}>
+                {[
+                  { label: "Cao (High)", count: alertStats.high, color: "error" },
+                  { label: "Trung bình (Medium)", count: alertStats.medium, color: "warning" },
+                  { label: "Thấp (Low)", count: alertStats.low, color: "success" }
+                ].map((item) => (
+                  <Box key={item.label}>
+                    <Stack direction="row" justifyContent="space-between" mb={1}>
+                      <Typography variant="body2" fontWeight={600}>{item.label}</Typography>
+                      <Typography variant="body2" fontWeight={800}>{item.count}</Typography>
+                    </Stack>
+                    <Box sx={{ width: '100%', height: 8, bgcolor: '#f1f5f9', borderRadius: 4, overflow: 'hidden' }}>
+                      <Box sx={{ 
+                        width: `${alertStats.total ? (item.count / alertStats.total) * 100 : 0}%`, 
+                        height: '100%', 
+                        bgcolor: `${item.color}.main`,
+                        transition: 'width 1s ease-in-out'
+                      }} />
+                    </Box>
+                  </Box>
+                ))}
               </Stack>
-              <HistoricalChart
-                data={alertTrendSeries}
-                xKey="label"
-                series={[{ dataKey: "count", name: "Alerts", color: "#ef5350" }]}
-                stacked={false}
-              />
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      <Card>
-        <CardContent>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center" mb={2}>
-            <Typography variant="subtitle1" sx={{ flex: 1 }}>
-              Lịch gửi báo cáo tự động
-            </Typography>
-            <Switch
-              checked={schedule.enabled}
-              onChange={(e) => setSchedule((prev) => ({ ...prev, enabled: e.target.checked }))}
-            />
-            <Select
-              size="small"
-              value={schedule.frequency}
-              onChange={(e) => setSchedule((prev) => ({ ...prev, frequency: e.target.value }))}
-            >
-              <MenuItem value="daily">Hàng ngày</MenuItem>
-              <MenuItem value="weekly">Hàng tuần</MenuItem>
-            </Select>
-            <TextField
-              size="small"
-              label="Recipients"
-              placeholder="email1@example.com, email2@example.com"
-              value={schedule.recipients}
-              onChange={(e) => setSchedule((prev) => ({ ...prev, recipients: e.target.value }))}
-              sx={{ minWidth: 260 }}
-            />
-            <Button variant="contained" onClick={saveSchedule} disabled={saving}>
-              {saving ? "Đang lưu..." : "Lưu"}
-            </Button>
-          </Stack>
-          <Typography variant="body2" color="text.secondary">
-            Lịch gửi chỉ mock trên client; backend thực tế cần cron/email service.
-          </Typography>
-        </CardContent>
+      {/* Device Table */}
+      <Card sx={{ borderRadius: 3 }}>
+        <Box sx={{ p: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>Chi tiết thiết bị</Typography>
+          <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleExportCSV}>
+            Xuất Excel (CSV)
+          </Button>
+        </Box>
+        <Divider />
+        <TableContainer>
+          <Table>
+            <TableHead sx={{ bgcolor: "#f8fafc" }}>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 700 }}>ID</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>TÊN THIẾT BỊ</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>ĐỊA CHỈ MAC</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>TRẠNG THÁI</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {devices.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((device) => (
+                <TableRow key={device.id} hover>
+                  <TableCell>#{device.id}</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>{device.name}</TableCell>
+                  <TableCell sx={{ fontFamily: 'monospace' }}>{device.mac_address || "---"}</TableCell>
+                  <TableCell>
+                    <Chip
+                      label={device.is_active ? "Đang chạy" : "Ngắt kết nối"}
+                      size="small"
+                      sx={{ 
+                        fontWeight: 700, 
+                        bgcolor: device.is_active ? "#dcfce7" : "#fee2e2",
+                        color: device.is_active ? "#166534" : "#991b1b"
+                      }}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        <TablePagination
+          rowsPerPageOptions={[5, 10, 25]}
+          component="div"
+          count={devices.length}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={(e, newPage) => setPage(newPage)}
+          onRowsPerPageChange={(e) => {
+            setRowsPerPage(parseInt(e.target.value, 10));
+            setPage(0);
+          }}
+          labelRowsPerPage="Số hàng:"
+        />
       </Card>
 
-      <Card>
-        <CardContent>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center" mb={1}>
-            <Typography variant="subtitle1" sx={{ flex: 1 }}>
-              Export thủ công
-            </Typography>
-            <Button
-              variant="outlined"
-              startIcon={<DownloadIcon />}
-              onClick={() => exportReport("csv")}
-            >
-              CSV
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<DownloadIcon />}
-              onClick={() => exportReport("pdf")}
-            >
-              PDF
-            </Button>
-          </Stack>
-          <Typography variant="body2" color="text.secondary">
-            Export dùng dữ liệu tóm tắt hiện tại, trả về file CSV hoặc PDF mock.
-          </Typography>
-        </CardContent>
-      </Card>
-
-      <Snackbar
-        open={toast.open}
-        autoHideDuration={3000}
-        onClose={() => setToast({ ...toast, open: false })}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert severity={toast.severity} onClose={() => setToast({ ...toast, open: false })} sx={{ width: "100%" }}>
-          {toast.message}
-        </Alert>
+      <Snackbar open={toast.open} autoHideDuration={4000} onClose={() => setToast({ ...toast, open: false })}>
+        <Alert severity={toast.severity} variant="filled">{toast.message}</Alert>
       </Snackbar>
     </Box>
   );

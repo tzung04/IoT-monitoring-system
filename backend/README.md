@@ -1,30 +1,49 @@
-# IoT Monitoring Backend
+# 🌐 IoT Monitoring Backend
 
-Backend cho hệ thống giám sát IoT.
+Hệ thống backend để giám sát thiết bị IoT real-time với MQTT, lưu trữ time-series data và hiển thị dashboard trên Grafana.
 
-## Hướng dẫn chạy Backend
+## 🛠 Tech Stack
 
-### Bước 1: Khởi động các services (InfluxDB, MQTT Broker)
+- **Runtime:** Node.js
+- **Database:** PostgreSQL (metadata), InfluxDB (time-series data)
+- **Message Broker:** Mosquitto MQTT
+- **Visualization:** Grafana
+- **Authentication:** JWT
 
-Tại thư mục cha, chạy lệnh:
+---
+
+## 📋 Prerequisites
+
+- Node.js >= 16.x
+- Docker & Docker Compose
+- PostgreSQL >= 13.x
+- MQTT Client (mosquitto-clients) - để test
+
+---
+
+## 🚀 Quick Start
+
+### 1. Clone và cài đặt dependencies
 
 ```bash
-docker-compose up -d
-```
-
-Lệnh này sẽ khởi động:
-- **InfluxDB** (port 8086) - Lưu trữ time series data
-- **Mosquitto MQTT Broker** (port 1884) - Nhận dữ liệu từ sensors
-Lưu ý: có thể xem/sửa port trong file docker-compose.yml 
-
-### Bước 2: Cài đặt dependencies
-
-```bash
+git clone <repository-url>
 cd backend
 npm install
 ```
 
-### Bước 3: Cấu hình môi trường
+### 2. Khởi động các services
+
+```bash
+# Tại thư mục gốc của project
+docker-compose up -d
+```
+
+Services sẽ chạy trên:
+- **InfluxDB:** http://localhost:8086
+- **Mosquitto MQTT:** mqtt://localhost:1884
+- **Grafana:** http://localhost:3001
+
+### 3. Cấu hình môi trường
 
 Tạo file `.env` trong thư mục `backend/`:
 
@@ -41,8 +60,8 @@ PG_PASSWORD=your_password
 
 # InfluxDB (Time Series Data)
 INFLUX_URL=http://localhost:8086
-INFLUX_TOKEN=your_influx_token
-INFLUX_ORG=your_org
+INFLUX_TOKEN=your_influx_token_here
+INFLUX_ORG=my-org
 INFLUX_BUCKET=iot_sensors
 
 # MQTT Broker
@@ -51,272 +70,397 @@ MQTT_USERNAME=
 MQTT_PASSWORD=
 
 # JWT
-JWT_SECRET=your_super_secret_key_change_this
+JWT_SECRET=your_super_secret_key_change_this_in_production
 JWT_EXPIRE=7d
 
-# Email (for password reset)
+# Email (Password Reset)
 EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587
 EMAIL_USER=your_email@gmail.com
-EMAIL_PASSWORD=your_app_password
+EMAIL_PASSWORD=your_gmail_app_password
 EMAIL_FROM=IoT Monitor <noreply@iotmonitor.com>
-
-# Grafana
-GRAFANA_URL=http://localhost:3001
-GRAFANA_DASHBOARD_UID=dashboard_uid
 ```
 
-### Bước 4: Setup Database
+### 4. Setup PostgreSQL Database
 
-**Tạo PostgreSQL database:**
 ```bash
-psql -U postgres
-CREATE DATABASE iot_monitoring;
-\q
-```
+# Tạo database
+psql -U postgres -c "CREATE DATABASE iot_monitoring;"
 
-**Chạy migration để tạo tables:**
-```bash
-node src/database/setup.js
-```
-
-### Bước 5.1: Setup InfluxDB
-
-1. Truy cập: `http://localhost:8086`
-2. Tạo tài khoản admin
-3. Tạo Organization (ví dụ: `my-org`)
-4. Tạo Bucket tên: `iot_sensors`
-5. Vào **API Tokens** → Copy token và paste vào `.env`
-
-### Bước 5.2: Setup Grafana
-
-1. Truy cập:
-- URL: `http://localhost:3001`
-- Login: `admin` / `admin`
-2. Vào Connections/Data Sources
-3. Add data source: chọn InfluxDB
-  Cấu hình:
-    ```
-    Name: InfluxDB-IoT
-
-    Query Language: Flux
-
-    HTTP:
-      URL: http://influxdb:8086
-
-    InfluxDB Details(xem ở bước 5.1):
-      Organization: 
-      Token: 
-      Default Bucket: 
-    ```
-4. Click **Save & Test** → Phải thấy "Success"
-5. Tạo Dashboard:
-  5.1 Tạo Dashboard mới
-
-    1. Click **+** (sidebar) → **Create Dashboard**
-    2. Click **Add visualization**
-    3. Chọn data source: **InfluxDB-IoT**
-
-  5.2 Tạo Variables (quan trọng!)
-
-  Click **Dashboard settings** → **Variables** → **Add variable**
-
-  Variable 1: user_id
-  ```
-  Name: user_id
-  Type: Query
-  Data source: InfluxDB-IoT
-  Query:
-    from(bucket: "iot_sensors")
-      |> range(start: -7d)
-      |> filter(fn: (r) => r._measurement == "sensor_data")
-      |> keep(columns: ["user_id"])
-      |> distinct(column: "user_id")
-
-  Multi-value: NO
-  Include All option: NO
-  ```
-
-  Variable 2: devices
-  ```
-  Name: devices
-  Type: Query
-  Data source: InfluxDB-IoT
-  Query:
-    from(bucket: "iot_sensors")
-      |> range(start: -7d)
-      |> filter(fn: (r) => r._measurement == "sensor_data")
-      |> filter(fn: (r) => r.user_id == "${user_id}")
-      |> keep(columns: ["device"])
-      |> distinct(column: "device")
-
-  Multi-value: YES
-  Include All option: YES
-
-  Sau đó Save
-6. Tạo Panels
-Panel 1: Temperature Time Series
-  Click Add panel
-  Query:
-  ```
-  from(bucket: "iot_sensors")
-    |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
-    |> filter(fn: (r) => r._measurement == "sensor_data")
-    |> filter(fn: (r) => r.user_id == "${user_id}")
-    |> filter(fn: (r) => r.device =~ /^${devices:regex}$/)
-    |> filter(fn: (r) => r._field == "temperature")
-    |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)
-  ```
-  Visualization:
-
-  Type: Time series
-  Title: Temperature Over Time
-
-  Panel options:
-
-  Unit: Celsius (°C)
-  Legend: Show
-
-  Click Save
-
-Panel 2: Humidity Time Series
-Tương tự Panel 1, chỉ đổi:
-```
-|> filter(fn: (r) => r._field == "humidity")
-```
-Panel options:
-
-Unit: Percent (0-100)
-Title: Humidity Over Time
-
-Panel 3: Latest Temperature (Stat)
-Click Add panel
-Query:
-```
-from(bucket: "iot_sensors")
-  |> range(start: -5m)
-  |> filter(fn: (r) => r._measurement == "sensor_data")
-  |> filter(fn: (r) => r.user_id == "${user_id}")
-  |> filter(fn: (r) => r.device =~ /^${devices:regex}$/)
-  |> filter(fn: (r) => r._field == "temperature")
-  |> last()
-```
-Visualization:
-
-Type: Stat
-Title: Current Temperature
-Unit: Celsius (°C)
-Graph mode: None
-Text size: Auto
-Panel 4: Latest Humidity (Gauge)
-Query:
-```
-from(bucket: "iot_sensors")
-  |> range(start: -5m)
-  |> filter(fn: (r) => r._measurement == "sensor_data")
-  |> filter(fn: (r) => r.user_id == "${user_id}")
-  |> filter(fn: (r) => r.device =~ /^${devices:regex}$/)
-  |> filter(fn: (r) => r._field == "humidity")
-  |> last()
-```
-Visualization:
-
-Type: Gauge
-Title: Current Humidity
-Unit: Percent (0-100)
-Min: 0
-Max: 100
-
-7. Lưu Dashboard
-
-Click Save dashboard (góc trên bên phải)
-Name: dashboard_name
-Click Save
-
-Lấy Dashboard UID: xem url của dashboard, uid nằm ở /d/uid/dashboard_name
-
-Copy UID (ví dụ: abc123xyz)
-Paste vào .env
-
-8. Giả sử đã đặt dashboard_name là IoT-monitoring
-có thể lấy url sau để test:
-nhớ tạo 1 user có 1 device xác định topic, bắn dữ liệu vô topic liên tục để test
- có thể dùng dashboardRoutes để lấy url
-http://localhost:3001/d/abc123xyz/iot-monitoring?orgId=1&var-user_id=1&theme=light&from=now-15m&to=now&timezone=browser&refresh=5s
-
-### Huong dan tao va kich hoat thiet bi
-#### 1. Them thiet bi logic
-```bash
-POST /api/devices/
-Content-Type: application/json
-
-{
-  "name": "Cam bien kho 1",
-  "mac_address": "AABBCCDDEEFF" (dia chi mac lay in tren thiet bi, nguoi dung tu nhap vao)
-}
-```
-**response**
-```json
-{
-    "id": 1,
-    "user_id": 1,
-    "place_id": null,
-    "mac_address": "AABBCCDDEEFF",
-    "device_serial": "E248D27E014AAAC6",
-    "name": "Cam bien kho 1",
-    "topic": "/devices/AABBCCDDEEFF/E248D27E014AAAC6/data",
-    "is_active": false,
-    "created_at": "2025-12-16T01:23:10.933Z"
-}
-```
-#### 2. Ket noi voi thiet bi vat ly
-Đến bước này sẽ do esp32 làm việc với server
-Cụ thể như sau:
-- Cấp nguồn cho esp32
-- esp32 kết nối wifi, kết nối mqtt broker sau đó subscribe topic system/provisioning/${mac}/res để chờ phản hồi từ server
-- esp32 gửi message {"mac": "AABBCCDDEEFF"} đến topic: system/provisioning/req
-- server active device logic, gửi topic nhận data đã tạo về cho esp32 qua topic system/provisioning/${mac}/res
-- esp32 nhận được res thì bắt đầu publish data vào topic server gửi về (/devices/AABBCCDDEEFF/E248D27E014AAAC6/data)
-
-thế là xong!
-
-[Nếu không có esp32 bạn dùng mqtt client tuỳ ý giả làm esp32 mà làm nhé]
-vi du: 
-1. send req: 
- mosquitto_pub -h localhost -p 1884 -t system/provisioning/req -m '{"mac": "AABBCCDDEEFF"}'
-2. recv res: 
- mosquitto_sub -h localhost -p 1884 -t system/provisioning/AABBCCDDEEFF/res
-{"status":"success","topic":"/devices/AABBCCDDEEFF/E248D27E014AAAC6/data"} (dong nay xuat hien khi ong vua publish o phia tren!)
-
-
-
-### Bước 6: Khởi động Server
+### 5. Khởi động server
 
 ```bash
 node src/server.js
+hoặc
+npm start
 ```
 
-Server sẽ chạy tại: `http://localhost:5000`
+Nếu thành công, bạn sẽ thấy:
 
-Bạn sẽ thấy log:
 ```
 ✓ PostgreSQL pool created
 ✓ InfluxDB connected
 ✓ Email service ready
 ✓ MQTT Broker connected
-MQTT listening for messages
-Subscribed to X device topics
 Server running on port 5000
 ```
 
 ---
 
-## Hướng dẫn sử dụng API
+## 🔧 Cấu hình InfluxDB
 
-### 1. Authentication
+### Bước 1: Truy cập InfluxDB UI
 
-#### Register (Đăng ký)
+Mở trình duyệt: **http://localhost:8086**
+
+### Bước 2: Setup Organization & Bucket
+
+1. **Đăng nhập lần đầu:**
+   - Username: `admin`
+   - Password: `password123` (hoặc theo docker-compose.yml)
+   - Organization: `my-org`
+   - Bucket: `iot_sensors`
+
+2. **Tạo API Token:**
+   - Vào sidebar → Click **API Tokens**
+   - Click **Generate API Token** → **All Access Token**
+   - Copy token và paste vào file `.env` → `INFLUX_TOKEN`
+
+### Bước 3: Verify kết nối
+
+Restart server và kiểm tra log:
+```
+✓ InfluxDB connected
+```
+
+---
+
+## 📊 Cấu hình Grafana Dashboard
+
+### Bước 1: Truy cập Grafana
+
+- URL: **http://localhost:3001**
+- Username: `admin`
+- Password: `admin` (đổi password khi được yêu cầu)
+
+### Bước 2: Thêm InfluxDB Data Source
+
+1. Vào **Connections** → **Data sources** → **Add data source**
+2. Chọn **InfluxDB**
+3. Cấu hình như sau:
+
+   ```
+   Name: InfluxDB-IoT
+   
+   Query Language: Flux
+   
+   HTTP:
+     URL: http://influxdb:8086
+   
+   Auth:
+     Basic auth: OFF
+   
+   InfluxDB Details:
+     Organization: my-org
+     Token: <paste-token-từ-influxdb>
+     Default Bucket: iot_sensors
+   ```
+
+4. Click **Save & Test** → Phải hiện **"Data source is working"**
+
+### Bước 3: Tạo Dashboard mới
+
+1. Click **+** (sidebar) → **Create** → **Dashboard**
+2. Click **Add visualization**
+3. Chọn data source: **InfluxDB-IoT**
+
+### Bước 4: Tạo Variables (QUAN TRỌNG!)
+
+Click **Dashboard settings** (⚙️ icon) → **Variables** → **Add variable**
+
+#### Variable 1: `user_id`
+
+```
+Name: user_id
+Type: Query
+Data source: InfluxDB-IoT
+
+Query:
+from(bucket: "iot_sensors")
+  |> range(start: -7d)
+  |> filter(fn: (r) => r._measurement == "sensor_data")
+  |> keep(columns: ["user_id"])
+  |> distinct(column: "user_id")
+
+Options:
+  ☐ Multi-value
+  ☐ Include All option
+```
+
+Click **Apply**
+
+#### Variable 2: `devices`
+
+```
+Name: devices
+Type: Query
+Data source: InfluxDB-IoT
+
+Query:
+from(bucket: "iot_sensors")
+  |> range(start: -7d)
+  |> filter(fn: (r) => r._measurement == "sensor_data")
+  |> filter(fn: (r) => r.user_id == "${user_id}")
+  |> keep(columns: ["device_name"])
+  |> distinct(column: "device_name")
+
+Options:
+  ☑ Multi-value
+  ☑ Include All option
+```
+
+Click **Apply** → **Save dashboard**
+
+### Bước 5: Tạo Visualization Panels
+
+#### Panel 1: Temperature Time Series
+
+```flux
+from(bucket: "iot_sensors")
+  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+  |> filter(fn: (r) => r._measurement == "sensor_data")
+  |> filter(fn: (r) => r.user_id == "${user_id}")
+  |> filter(fn: (r) => r.device_name =~ /^${devices:regex}$/)
+  |> filter(fn: (r) => r._field == "temperature")
+  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)
+```
+
+**Panel Settings:**
+- Visualization: **Time series**
+- Title: `Temperature Over Time`
+- Unit: `Celsius (°C)`
+- Legend: Show
+
+#### Panel 2: Humidity Time Series
+
+```flux
+from(bucket: "iot_sensors")
+  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+  |> filter(fn: (r) => r._measurement == "sensor_data")
+  |> filter(fn: (r) => r.user_id == "${user_id}")
+  |> filter(fn: (r) => r.device_name =~ /^${devices:regex}$/)
+  |> filter(fn: (r) => r._field == "humidity")
+  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)
+```
+
+**Panel Settings:**
+- Visualization: **Time series**
+- Title: `Humidity Over Time`
+- Unit: `Percent (0-100)`
+
+#### Panel 3: Current Temperature (Stat)
+
+```flux
+from(bucket: "iot_sensors")
+  |> range(start: -5m)
+  |> filter(fn: (r) => r._measurement == "sensor_data")
+  |> filter(fn: (r) => r.user_id == "${user_id}")
+  |> filter(fn: (r) => r.device_name =~ /^${devices:regex}$/)
+  |> filter(fn: (r) => r._field == "temperature")
+  |> last()
+```
+
+**Panel Settings:**
+- Visualization: **Stat**
+- Title: `Current Temperature`
+- Unit: `Celsius (°C)`
+- Graph mode: None
+
+#### Panel 4: Current Humidity (Gauge)
+
+```flux
+from(bucket: "iot_sensors")
+  |> range(start: -5m)
+  |> filter(fn: (r) => r._measurement == "sensor_data")
+  |> filter(fn: (r) => r.user_id == "${user_id}")
+  |> filter(fn: (r) => r.device_name =~ /^${devices:regex}$/)
+  |> filter(fn: (r) => r._field == "humidity")
+  |> last()
+```
+
+**Panel Settings:**
+- Visualization: **Gauge**
+- Title: `Current Humidity`
+- Unit: `Percent (0-100)`
+- Min: `0`, Max: `100`
+
+### Bước 6: Lưu Dashboard
+
+1. Click **Save dashboard** (💾 icon phía trên)
+2. Dashboard name: `IoT Monitoring`
+3. Click **Save**
+
+### Bước 7: Lấy Dashboard UID
+
+1. Xem URL của dashboard:
+   ```
+   http://localhost:3001/d/abc123xyz/iot-monitoring
+                           ^^^^^^^^^
+                           Đây là UID
+   ```
+
+2. Copy UID và paste vào file `.env`:
+   ```env
+   GRAFANA_DASHBOARD_UID=abc123xyz
+   ```
+
+### Bước 8: Test Dashboard
+
+URL để test (thay `abc123xyz` bằng UID của bạn):
+
+```
+http://localhost:3001/d/abc123xyz/iot-monitoring?orgId=1&var-user_id=1&theme=light&from=now-15m&to=now&refresh=5s
+```
+
+**Lưu ý:** Dashboard chỉ hiển thị data khi đã có thiết bị gửi dữ liệu vào InfluxDB.
+
+---
+
+## 🔌 Device Provisioning Flow
+
+### Tổng quan
+
+```
+┌─────────┐         ┌─────────┐         ┌──────────┐
+│ ESP32   │────────▶│ Backend │────────▶│ InfluxDB │
+│ Device  │  MQTT   │ Server  │   Data  │          │
+└─────────┘         └─────────┘         └──────────┘
+     │                    │
+     │                    │
+     │  1. Register       │
+     │  2. Provision      │
+     │  3. Send Data      │
+```
+
+### Bước 1: Đăng ký thiết bị (Backend)
+
 ```bash
+POST /api/devices
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+
+{
+  "name": "Cảm biến kho 1",
+  "mac_address": "AA:BB:CC:DD:EE:FF"
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": 1,
+  "user_id": 1,
+  "mac_address": "AA:BB:CC:DD:EE:FF",
+  "device_serial": "E248D27E014AAAC6",
+  "name": "Cảm biến kho 1",
+  "topic": "/devices/AA:BB:CC:DD:EE:FF/E248D27E014AAAC6/data",
+  "is_active": false,
+  "created_at": "2025-12-16T01:23:10.933Z"
+}
+```
+
+**Lưu ý:** Lúc này thiết bị đã được tạo trong database nhưng chưa active (`is_active: false`).
+
+### Bước 2: Kích hoạt thiết bị (ESP32)
+
+#### 2.1. ESP32 gửi yêu cầu kích hoạt
+
+ESP32 publish message đến topic:
+
+```bash
+Topic: system/provisioning/req
+Payload: {"mac": "AA:BB:CC:DD:EE:FF"}
+```
+
+**Ví dụ với mosquitto client:**
+
+```bash
+mosquitto_pub -h localhost -p 1884 \
+  -t "system/provisioning/req" \
+  -m '{"mac": "AA:BB:CC:DD:EE:FF"}'
+```
+
+#### 2.2. Backend xử lý & phản hồi
+
+Backend nhận request, kiểm tra MAC address trong database:
+- Nếu tìm thấy → Set `is_active = true`
+- Gửi phản hồi về cho ESP32 qua topic: `system/provisioning/{MAC}/res`
+
+#### 2.3. ESP32 nhận phản hồi
+
+ESP32 subscribe topic `system/provisioning/AA:BB:CC:DD:EE:FF/res`:
+
+```bash
+mosquitto_sub -h localhost -p 1884 \
+  -t "system/provisioning/AA:BB:CC:DD:EE:FF/res"
+```
+
+**Response từ backend:**
+
+```json
+{
+  "status": "success",
+  "topic": "/devices/AA:BB:CC:DD:EE:FF/E248D27E014AAAC6/data"
+}
+```
+
+### Bước 3: ESP32 gửi dữ liệu
+
+ESP32 bắt đầu publish dữ liệu sensor vào topic nhận được:
+
+```bash
+Topic: /devices/AA:BB:CC:DD:EE:FF/E248D27E014AAAC6/data
+Payload: {"temperature": 25.5, "humidity": 60.3}
+```
+
+**Ví dụ test:**
+
+```bash
+mosquitto_pub -h localhost -p 1884 \
+  -t "/devices/AA:BB:CC:DD:EE:FF/E248D27E014AAAC6/data" \
+  -m '{"temperature": 25.5, "humidity": 60.3}'
+```
+
+### Workflow Diagram
+
+```
+ESP32                    Backend                    Database
+  |                         |                           |
+  |--1. POST /api/devices-->|                           |
+  |                         |---Create device---------->|
+  |<----Response (topic)----|                           |
+  |                         |                           |
+  |--2. Provision Request-->|                           |
+  | (MQTT: provisioning/req)|                           |
+  |                         |---Set is_active=true----->|
+  |<--3. Provision Response-|                           |
+  | (MQTT: provisioning/res)|                           |
+  |                         |                           |
+  |--4. Send sensor data--->|                           |
+  | (MQTT: device topic)    |---Save to InfluxDB------->|
+  |                         |                           |
+```
+
+---
+
+## 📡 API Documentation
+
+### Authentication
+
+#### 1. Register
+
+```http
 POST /api/auth/register
 Content-Type: application/json
 
@@ -327,20 +471,9 @@ Content-Type: application/json
 }
 ```
 
-**Response:**
-```json
-{
-  "message": "User registered successfully",
-  "user": {
-    "id": 1,
-    "username": "john",
-    "email": "john@example.com"
-  }
-}
-```
+#### 2. Login
 
-#### Login (Đăng nhập)
-```bash
+```http
 POST /api/auth/login
 Content-Type: application/json
 
@@ -353,26 +486,27 @@ Content-Type: application/json
 **Response:**
 ```json
 {
-  "message": "Login successful",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "user": {
     "id": 1,
     "username": "john",
     "email": "john@example.com"
-  },
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
 }
 ```
 
-#### Get Current User
-```bash
+#### 3. Get Current User
+
+```http
 GET /api/auth/me
-Authorization: Bearer YOUR_TOKEN
+Authorization: Bearer <token>
 ```
 
-#### Change Password
-```bash
+#### 4. Change Password
+
+```http
 PUT /api/auth/change-password
-Authorization: Bearer YOUR_TOKEN
+Authorization: Bearer <token>
 Content-Type: application/json
 
 {
@@ -381,8 +515,9 @@ Content-Type: application/json
 }
 ```
 
-#### Forgot Password
-```bash
+#### 5. Forgot Password
+
+```http
 POST /api/auth/forgot-password
 Content-Type: application/json
 
@@ -390,10 +525,12 @@ Content-Type: application/json
   "email": "john@example.com"
 }
 ```
-Hệ thống sẽ gửi mã 6 ký tự qua email.
 
-#### Reset Password
-```bash
+Hệ thống gửi mã 6 ký tự qua email, có hiệu lực trong 5 phút.
+
+#### 6. Reset Password
+
+```http
 POST /api/auth/reset-password
 Content-Type: application/json
 
@@ -404,152 +541,181 @@ Content-Type: application/json
 }
 ```
 
----
+### Devices
 
-## Test MQTT và InfluxDB
+#### 1. Get All Devices
 
-### 1. Thêm device vào database
+```http
+GET /api/devices
+Authorization: Bearer <token>
+```
 
-```bash
+#### 2. Create Device
+
+```http
 POST /api/devices
+Authorization: Bearer <token>
 Content-Type: application/json
 
 {
+  "name": "Cảm biến kho 1",
   "mac_address": "AABBCCDDEEFF",
-  "name": "Cam bien kho 1",
-  "place_id": "1" (co roi thi them khong thi thoi nhe)
+  "place_id": 1  // Optional
 }
 ```
 
-### 2. Publish test data qua MQTT
+#### 3. Update Device
 
-**Cài mosquitto client:**
-```bash
-# Ubuntu/Debian
-sudo apt-get install mosquitto-clients
+```http
+PUT /api/devices/:id
+Authorization: Bearer <token>
+Content-Type: application/json
 
-# Mac
-brew install mosquitto
+{
+  "name": "Cảm biến kho 2",
+  "place_id": 2
+}
 ```
 
-**Gửi dữ liệu sensor:**
-topic ban vao database xem nhe
-```bash
-mosquitto_pub -h localhost -t "/devices/AABBCCDDEEFF/{serial}/data" \
-  -m '{"temperature": 25.5, "humidity": 60.3}'
+#### 4. Delete Device
+
+```http
+DELETE /api/devices/:id
+Authorization: Bearer <token>
 ```
 
-### 3. Kiểm tra kết quả
+### Places
 
-**Trong terminal server:**
-```
-Message from /devices/AABBCCDDEEFF: { temperature: 25.5, humidity: 60.3 }
-✓ Data saved to InfluxDB for device: Cảm biến kho 1
+#### 1. Get All Places
+
+```http
+GET /api/places
+Authorization: Bearer <token>
 ```
 
-**Trong InfluxDB UI** (`http://localhost:8086`):
-1. Vào **Data Explorer**
-2. Chọn bucket: `iot_sensors`
-3. Filter: `_measurement = sensor_data`
-4. Xem dữ liệu temperature và humidity
+#### 2. Create Place
+
+```http
+POST /api/places
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "name": "Kho A",
+  "description": "Kho chứa hàng tầng 1"
+}
+```
 
 ---
 
-## Cấu trúc Database
+## 🗄 Database Schema
 
-### PostgreSQL (Metadata)
+### PostgreSQL Tables
 
-**users**
-- id, username, email, password_hash
-- reset_code, reset_expires
-- created_at
+#### `users`
+| Column | Type | Description |
+|--------|------|-------------|
+| id | SERIAL | Primary key |
+| username | VARCHAR(50) | Unique username |
+| email | VARCHAR(100) | Unique email |
+| password_hash | VARCHAR(255) | Hashed password |
+| reset_code | VARCHAR(6) | Password reset code |
+| reset_expires | TIMESTAMP | Code expiration time |
+| created_at | TIMESTAMP | Account creation time |
 
-**places**
-- id, user_id, name, description
-- created_at
+#### `places`
+| Column | Type | Description |
+|--------|------|-------------|
+| id | SERIAL | Primary key |
+| user_id | INTEGER | Foreign key → users |
+| name | VARCHAR(100) | Place name |
+| description | TEXT | Optional description |
+| created_at | TIMESTAMP | Creation time |
 
-**devices**
-- id, user_id, place_id
-- mac_address, device_serial, name, topic
-- is_active, created_at
+#### `devices`
+| Column | Type | Description |
+|--------|------|-------------|
+| id | SERIAL | Primary key |
+| user_id | INTEGER | Foreign key → users |
+| place_id | INTEGER | Foreign key → places (nullable) |
+| mac_address | VARCHAR(17) | Device MAC address |
+| device_serial | VARCHAR(50) | Generated serial |
+| name | VARCHAR(100) | Device name |
+| topic | VARCHAR(255) | MQTT topic |
+| is_active | BOOLEAN | Provisioning status |
+| created_at | TIMESTAMP | Creation time |
 
-**alert_rules**
-- id, device_id
-- metric_type, condition, threshold
-- email_to, is_enabled, created_at
-
-**alert_logs**
-- id, device_id, rule_id
-- value_at_time, message, triggered_at
-
-### InfluxDB (Time Series)
+### InfluxDB Schema
 
 **Measurement:** `sensor_data`
-- **Tags:** `device` (device_serial)
-- **Fields:** `temperature`, `humidity`
-- **Timestamp:** auto
+
+| Type | Field | Description |
+|------|-------|-------------|
+| Tag | `user_id` | User ID (for filtering) |
+| Tag | `device_name` | Device name |
+| Field | `temperature` | Temperature (°C) |
+| Field | `humidity` | Humidity (%) |
+| Timestamp | Auto | Time of measurement |
 
 ---
 
-## Cấu hình Email (Gmail)
+## 🔍 Troubleshooting
 
-1. Vào **Google Account** → **Security**
-2. Bật **2-Factor Authentication**
-3. Tạo **App Password** cho Mail
-4. Copy App Password vào `.env` → `EMAIL_PASSWORD`
+### ❌ PostgreSQL connection failed
 
----
-
-## Workflow Hệ Thống
-
-1. **Device** gửi dữ liệu qua MQTT → Topic đã đăng ký
-2. **Backend** nhận message → Parse JSON
-3. Tìm **device** trong PostgreSQL theo topic
-4. Lưu data vào **InfluxDB** (time series)
-5. Kiểm tra **Alert Rules** → Gửi email nếu vượt ngưỡng
-
----
-
-## Troubleshooting
-
-### PostgreSQL không kết nối
 ```bash
 # Kiểm tra PostgreSQL đang chạy
 sudo systemctl status postgresql
 
 # Kiểm tra credentials trong .env
+cat .env | grep PG_
 ```
 
-### MQTT không kết nối
+### ❌ MQTT broker not connected
+
 ```bash
-# Kiểm tra Mosquitto đang chạy
+# Kiểm tra container
 docker ps | grep mosquitto
 
-# Test connection
-mosquitto_sub -h localhost -t "#"
+# Test MQTT connection
+mosquitto_sub -h localhost -p 1884 -t "#"
 ```
 
-### InfluxDB không hoạt động
-```bash
-# Kiểm tra container đang chạy
-docker ps | grep influxdb
+### ❌ InfluxDB authentication failed
 
-# Xem logs
-docker logs influxdb
-```
+- Kiểm tra `INFLUX_TOKEN` trong `.env`
+- Tạo lại token trong InfluxDB UI
+- Verify organization name và bucket name
 
-### Email không gửi được
-- Kiểm tra đã tạo App Password chưa
-- Kiểm tra EMAIL_USER và EMAIL_PASSWORD trong .env
-- Test connection: server sẽ log `✓ Email service ready`
+### ❌ Grafana không hiển thị data
+
+1. Kiểm tra device đã active chưa (`is_active = true`)
+2. Verify device đang gửi data (xem server logs)
+3. Kiểm tra data trong InfluxDB Data Explorer
+4. Verify Grafana variables (user_id, devices)
 
 ---
 
-## Notes
+## 📝 Notes
 
 - JWT token hết hạn sau **7 ngày**
-- Reset code hết hạn sau **5 phút**
+- Password reset code hết hạn sau **5 phút**
 - MQTT QoS: **1** (at least once delivery)
-- PostgreSQL pool: max **20 connections**
+- InfluxDB retention policy: **mặc định unlimited**
 
 ---
+
+## 📧 Email Configuration (Gmail)
+
+1. Vào **Google Account** → **Security**
+2. Bật **2-Step Verification**
+3. Tạo **App Password**:
+   - Chọn app: Mail
+   - Chọn device: Other (Custom name)
+4. Copy App Password → Paste vào `.env` → `EMAIL_PASSWORD`
+
+---
+
+## 📄 License
+
+MIT License

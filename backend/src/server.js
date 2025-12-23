@@ -2,6 +2,8 @@ import dotenv from 'dotenv';
 import express, { json, urlencoded } from 'express';
 import cors from 'cors';
 
+
+import {setupDatabase} from './database/setup.js'
 import {connectMQTT} from './config/mqtt.js'
 import mqttService from './services/mqtt.service.js'
 import emailService from './services/email.service.js';
@@ -15,6 +17,7 @@ import dashboardRoutes from './routes/dashboard.routes.js';
 import dataRoutes from './routes/data.routes.js';
 import alertRoutes from './routes/alert.routes.js';
 import historyRoutes from './routes/history.routes.js';
+import placeRoutes from './routes/place.routes.js';
 
 dotenv.config();
 const app = express();
@@ -25,16 +28,21 @@ app.use(cors());
 app.use(json());
 app.use(urlencoded({ extended: true }));
 
-// MQTT server
-connectMQTT();
-mqttService.startListening();
-mqttService.subscribeAllDevices();
+// Setup Database
+await setupDatabase();
 
 // Test InfluxDB
 await testConnection();
 
 // Test Email Service
 emailService.testConnection();
+
+// MQTT server
+connectMQTT();
+mqttService.startListening();
+setTimeout(() => {
+      mqttService.subscribeAllDevices();
+    }, 5000);
 
 // Health check
 app.get('/', (req, res) => {
@@ -51,6 +59,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/data', dataRoutes);
 app.use('/api/alert', alertRoutes);
 app.use('/api/history', historyRoutes);
+app.use('/api/places', placeRoutes);
 
 // 404 handler
 app.use((req, res) => {
