@@ -97,8 +97,43 @@ const DataExplorerPage = () => {
   };
 
   const handleExportCSV = () => {
-     // Logic export của bạn ở đây
-     console.log("Exporting CSV...");
+    if (!sensorData || sensorData.length === 0) {
+      setToast({ open: true, message: "Không có dữ liệu để xuất!", severity: "warning" });
+      return;
+    }
+
+    try {
+      const headers = ["Thời gian", "Loại metric", "Giá trị"];
+
+      const rows = sensorData.map((item) => {
+        const time = new Date(item.timestamp).toLocaleString("vi-VN").replace(/,/g, ""); 
+        
+        return [
+          time,
+          item.metric_type === "temperature" ? "Nhiệt độ" : "Độ ẩm",
+          item.value
+        ].join(","); 
+      });
+
+      const csvContent = [headers.join(","), ...rows].join("\n");
+
+      const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+      
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `sensor_data_export_${new Date().getTime()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      setToast({ open: true, message: "Xuất file CSV thành công!", severity: "success" });
+    } catch (error) {
+      console.error(error);
+      setToast({ open: true, message: "Có lỗi khi xuất file", severity: "error" });
+    }
   };
 
   const handleClear = () => {
